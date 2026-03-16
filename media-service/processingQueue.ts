@@ -15,6 +15,11 @@ import {
 import { generateAgentReply } from "@/lib/services/agent";
 import { transcribeAudioBuffer } from "@/lib/services/stt";
 import { synthesizeSpeechBuffer } from "@/lib/services/tts";
+import { audioBufferToOpusFrames } from "@/media-service/opusFromMp3";
+import {
+  getOutboundSender,
+  scheduleOutboundAudio,
+} from "@/media-service/outboundAudioTrack";
 
 type ProcessingState = {
   queued: boolean;
@@ -281,6 +286,8 @@ export function queueTurnIfReady(sessionId: string) {
           text: result.replyText,
           languageCode: result.replyLanguage,
         });
+
+        // Store TTS audio for HTTP fallback delivery (always keep this path).
         const storedTts = appendStoredTtsAudio(sessionId, {
           turnNumber,
           contentType: tts.contentType,
@@ -291,11 +298,62 @@ export function queueTurnIfReady(sessionId: string) {
           contentType: storedTts.contentType,
           createdAt: storedTts.createdAt,
         };
-        prepareOutboundDelivery(sessionId);
+
+        // Attempt WebRTC audio delivery first (real-time, no polling needed).
+        const rtcSender = getOutboundSender(sessionId);
+        let rtcDelivered = false;
+
+        if (rtcSender) {
+          try {
+            console.log("[media-service/processing] converting TTS to Opus for WebRTC", {
+              sessionId,
+              turnNumber,
+              bytes: tts.buffer.length,
+            });
+            const opusFrames = await audioBufferToOpusFrames(tts.buffer);
+            // scheduleOutboundAudio runs asynchronously (paced at 20ms/frame).
+            // We don't await it so processing completes and the client can
+            // see the transcript immediately while audio plays in the background.
+            scheduleOutboundAudio(sessionId, opusFrames).catch((err) => {
+              console.warn("[media-service/processing] WebRTC audio error", {
+                sessionId, err: String(err),
+              });
+            });
+            rtcDelivered = true;
+            pushMediaSessionEvent(sessionId, "processing_tts_rtc_scheduled", {
+              turnNumber,
+              frameCount: opusFrames.length,
+            });
+          } catch (rtcErr) {
+            console.warn("[media-service/processing] WebRTC audio conversion failed, using HTTP", {
+              sessionId,
+              err: String(rtcErr),
+            });
+          }
+        }
+
+        // If WebRTC is unavailable or conversion failed, fall back to HTTP delivery.
+        if (!rtcDelivered) {
+          prepareOutboundDelivery(sessionId);
+        }
+
+        // Mark outboundAudio so the client knows audio is ready (rtcMode flag
+        // tells the panel not to fetch the HTTP audio since WebRTC delivers it).
+        updateMediaSession(sessionId, {
+          outboundAudio: {
+            ready: true,
+            turnNumber,
+            contentType: storedTts.contentType,
+            createdAt: storedTts.createdAt,
+            rtcMode: rtcDelivered,
+          },
+        });
+
         pushMediaSessionEvent(sessionId, "processing_tts_completed", {
           turnNumber,
           contentType: tts.contentType,
           bytes: tts.buffer.length,
+          rtcDelivered,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";

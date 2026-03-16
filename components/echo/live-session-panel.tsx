@@ -53,8 +53,11 @@ type TelemetrySnapshot = {
     turnNumber?: number;
     contentType?: string;
     createdAt?: string;
+    /** true = audio delivered via WebRTC track; false/absent = use HTTP fetch */
+    rtcMode?: boolean;
   } | null;
   turns?: Array<{ role: string; text: string; language?: string }>;
+  events?: Array<{ type: string; at: string; data?: Record<string, unknown> }>;
   eventCount: number;
   turnCount: number;
 };
@@ -148,13 +151,15 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 // ---------------------------------------------------------------------------
 
 export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
-  const fullSessionRef    = React.useRef<FullWebRtcClientSession | null>(null);
-  const vadRef            = React.useRef<VadLoop | null>(null);
-  const audioContextRef   = React.useRef<AudioContext | null>(null);
-  const audioRef          = React.useRef<HTMLAudioElement | null>(null);
-  const ttsAudioRef       = React.useRef<HTMLAudioElement | null>(null);
-  const lastPlayedTurnRef = React.useRef<number | null>(null);
-  const chatEndRef        = React.useRef<HTMLDivElement | null>(null);
+  const fullSessionRef       = React.useRef<FullWebRtcClientSession | null>(null);
+  const vadRef               = React.useRef<VadLoop | null>(null);
+  const audioContextRef      = React.useRef<AudioContext | null>(null);
+  const audioRef             = React.useRef<HTMLAudioElement | null>(null);
+  const ttsAudioRef          = React.useRef<HTMLAudioElement | null>(null);
+  const lastPlayedTurnRef    = React.useRef<number | null>(null);
+  const chatEndRef           = React.useRef<HTMLDivElement | null>(null);
+  /** Track how many session events we have already scanned for RTC events */
+  const lastEventCountRef    = React.useRef<number>(0);
 
   const [phase, setPhase]           = React.useState<SessionPhase>("idle");
   const [sessionId, setSessionId]   = React.useState<string>("");
@@ -186,7 +191,6 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
       setTelemetry(t as TelemetrySnapshot | null);
 
       // Build messages from the server turn list.
-      // Each server turn has role "user" or "assistant".
       const serverTurns = (t as TelemetrySnapshot | null)?.turns ?? [];
       if (serverTurns.length > 0) {
         setMessages(
@@ -198,6 +202,35 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
             turnNumber: idx,
           }))
         );
+      }
+
+      // Scan new session events for WebRTC audio lifecycle signals.
+      // outbound_rtc_started → mute VAD (AI is about to speak via WebRTC)
+      // outbound_rtc_ended   → unmute VAD (AI finished speaking)
+      const allEvents = (snapshot as Record<string, unknown>).events;
+      if (Array.isArray(allEvents)) {
+        const newEvents = allEvents.slice(lastEventCountRef.current);
+        lastEventCountRef.current = allEvents.length;
+
+        for (const ev of newEvents as Array<{ type: string }>) {
+          if (ev.type === "outbound_rtc_started") {
+            vadRef.current?.mute();
+            setVadMuted(true);
+            setPhase("speaking");
+            fetch(
+              `/api/media-service/set-listening?sessionId=${client.id}&listening=0`,
+              { method: "POST" }
+            ).catch(() => {});
+          } else if (ev.type === "outbound_rtc_ended") {
+            vadRef.current?.unmute();
+            setVadMuted(false);
+            setPhase((p) => (p === "speaking" ? "connected" : p));
+            fetch(
+              `/api/media-service/set-listening?sessionId=${client.id}&listening=1`,
+              { method: "POST" }
+            ).catch(() => {});
+          }
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -238,19 +271,31 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     if (!turnNumber || lastPlayedTurnRef.current === turnNumber) return;
     lastPlayedTurnRef.current = turnNumber;
 
+    // ── WebRTC mode: audio is delivered via the remote MediaStream track. ──
+    // The browser plays it automatically through audioRef.srcObject.
+    // Turn-taking (VAD mute/unmute) is handled by outbound_rtc_started/ended
+    // events scanned in refreshSnapshot. Nothing to do here except mark seen.
+    if (snap.outboundAudio.rtcMode) {
+      console.log("[live-session-panel] RTC audio delivery — remote stream handles playback", {
+        sessionId: client.id,
+        turnNumber,
+      });
+      // Mark HTTP endpoint as delivered so it doesn't accumulate stale state.
+      fetch(`/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1`)
+        .catch(() => {});
+      return;
+    }
+
+    // ── HTTP fallback mode: fetch MP3 and play via AudioContext / <audio>. ──
     setPhase("speaking");
     setPlayingTurn(turnNumber);
-
-    // ── Turn-taking: mute mic + tell server to discard incoming audio ──
     vadRef.current?.mute();
     setVadMuted(true);
     setServerListening(false);
 
-    /** Called when playback finishes (any path). */
     const onPlaybackDone = () => {
       setPhase("connected");
       setPlayingTurn(null);
-      // ── Unmute mic + re-enable server listening ──
       vadRef.current?.unmute();
       setVadMuted(false);
       setServerListening(true);
@@ -275,7 +320,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
           source.connect(audioContext.destination);
           source.onended = onPlaybackDone;
           source.start(0);
-          console.log("[live-session-panel] AudioContext playback started", {
+          console.log("[live-session-panel] HTTP audio playback started", {
             sessionId: client.id,
             turnNumber,
             duration: decoded.duration.toFixed(2) + "s",
@@ -326,6 +371,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     setPhase("starting");
     setMessages([]);
     lastPlayedTurnRef.current = null;
+    lastEventCountRef.current = 0;
 
     try {
       const fullClient = new FullWebRtcClientSession();
@@ -381,6 +427,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     vadRef.current = null;
     setMicLevel(0);
     setVadMuted(false);
+    lastEventCountRef.current = 0;
     await audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
     await fullSessionRef.current?.stop();
@@ -495,7 +542,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
                 </>
               ) : null}
               {telemetry.outboundAudio?.ready ? (
-                <p>Audio ready: turn {telemetry.outboundAudio.turnNumber} ({telemetry.outboundAudio.contentType})</p>
+                <p>Audio: turn {telemetry.outboundAudio.turnNumber} · {telemetry.outboundAudio.rtcMode ? "🔵 WebRTC" : "🟡 HTTP"}</p>
               ) : null}
             </div>
           ) : null}

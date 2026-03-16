@@ -1,4 +1,5 @@
-import { RTCPeerConnection } from "werift";
+import { RTCPeerConnection, MediaStreamTrack } from "werift";
+import type { RTCRtpSender } from "werift";
 
 export type InboundTrackObserver = {
   kind: string;
@@ -77,11 +78,17 @@ export type MediaServiceSession = {
     createdAt?: string;
     delivered?: boolean;
     deliveredAt?: string;
+    /** true when audio is being delivered via WebRTC RTP (not HTTP fetch) */
+    rtcMode?: boolean;
   };
 };
 
 export type MediaPeerBundle = {
   pc: RTCPeerConnection;
+  /** Local audio track added to the peer for sending TTS audio to the browser */
+  localAudioTrack?: MediaStreamTrack;
+  /** RTP sender for the local audio track */
+  localAudioSender?: RTCRtpSender;
 };
 
 declare global {

@@ -6,6 +6,8 @@ import {
   getMediaSession,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { removeOutboundSender } from "@/media-service/outboundAudioTrack";
+import { removeListeningState } from "@/media-service/listeningState";
 
 export const runtime = "nodejs";
 
@@ -81,6 +83,8 @@ export async function DELETE(req: Request) {
     );
   }
 
+  removeOutboundSender(sessionId);
+  removeListeningState(sessionId);
   closeMediaSession(sessionId);
   return NextResponse.json({ ok: true });
 }

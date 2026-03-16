@@ -1,6 +1,7 @@
-import { RTCPeerConnection } from "werift";
+import { RTCPeerConnection, MediaStreamTrack } from "werift";
 
 import { attachInboundTrackObserver } from "@/media-service/inboundTrack";
+import { registerOutboundSender, removeOutboundSender } from "@/media-service/outboundAudioTrack";
 import { getMediaServiceStore } from "@/media-service/store";
 import {
   getMediaSession,
@@ -126,7 +127,7 @@ export async function ensureMediaPeer(sessionId: string) {
     });
   });
 
-  const bundle = { pc };
+  const bundle: import("@/media-service/store").MediaPeerBundle = { pc };
   getMediaServiceStore().peers.set(sessionId, bundle);
   return bundle;
 }
@@ -144,6 +145,26 @@ export async function mediaAcceptOffer(params: {
     type,
     sdpLength: sdp.length,
   });
+
+  // Add a local audio track so the server can send TTS audio back to the browser.
+  // This must be done BEFORE createAnswer() so the SDP includes our outbound audio.
+  try {
+    const bundle = getMediaServiceStore().peers.get(sessionId);
+    if (bundle && !bundle.localAudioTrack) {
+      const localAudioTrack = new MediaStreamTrack({ kind: "audio" });
+      const localAudioSender = pc.addTrack(localAudioTrack);
+      bundle.localAudioTrack = localAudioTrack;
+      bundle.localAudioSender = localAudioSender;
+      registerOutboundSender(sessionId, localAudioSender);
+      console.log("[media-service/peer] local audio track added", { sessionId });
+      pushMediaSessionEvent(sessionId, "local_audio_track_added", {});
+    }
+  } catch (err) {
+    console.warn("[media-service/peer] failed to add local audio track", {
+      sessionId,
+      err: String(err),
+    });
+  }
 
   // Apply any ICE candidates that arrived before the offer (trickle ICE ordering).
   const buffered = getPendingIceCandidates(sessionId);
