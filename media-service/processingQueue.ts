@@ -63,6 +63,36 @@ async function runStubStt(sessionId: string, turnNumber: number) {
   const buffer = packaged.buffer;
   const mimeType = packaged.mimeType;
 
+  // --- DEBUG: analyse raw frame sizes + first bytes to detect silence/format ---
+  const frameSizes = frames.map((f) => f.length);
+  const avgFrameSize = frameSizes.length
+    ? frameSizes.reduce((a, b) => a + b, 0) / frameSizes.length
+    : 0;
+  const silenceFrames = frameSizes.filter((s) => s <= 5).length;
+  const voiceFrames   = frameSizes.filter((s) => s > 5).length;
+  // Show first byte (Opus TOC) of the first 5 frames as hex so we can identify format
+  const firstFrameHex = frames.slice(0, 5).map((f) =>
+    f.length > 0 ? Array.from(f.slice(0, 4)).map((b) => b.toString(16).padStart(2, "0")).join(" ") : "(empty)"
+  );
+  console.log("[media-service/processing] frame analysis", {
+    sessionId,
+    turnNumber,
+    totalFrames: frames.length,
+    avgFrameBytes: avgFrameSize.toFixed(1),
+    silenceFrames,
+    voiceFrames,
+    firstFewSizes: frameSizes.slice(0, 10),
+    firstFrameHex,
+  });
+
+  // --- DEBUG: dump OGG to /tmp for offline inspection ---
+  if (buffer.length > 0) {
+    const fs = await import("fs/promises");
+    const debugPath = `/tmp/echotalk-debug-turn-${turnNumber}-${sessionId.slice(0, 8)}.ogg`;
+    await fs.writeFile(debugPath, buffer).catch(() => {});
+    console.log("[media-service/processing] OGG dumped to", debugPath);
+  }
+
   pushMediaSessionEvent(sessionId, "processing_stt_started", {
     turnNumber,
     bytes: buffer.length,
@@ -70,6 +100,9 @@ async function runStubStt(sessionId: string, turnNumber: number) {
     packagingMode: packaged.mode,
     frameCount: packaged.frameCount,
     hasStoredAudio: Boolean(storedAudio),
+    avgFrameBytes: avgFrameSize.toFixed(1),
+    silenceFrames,
+    voiceFrames,
   });
 
   try {

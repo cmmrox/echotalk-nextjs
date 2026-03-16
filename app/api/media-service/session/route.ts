@@ -56,6 +56,8 @@ export async function GET(req: Request) {
       outboundAudio: session.outboundAudio ?? null,
       eventCount: session.events.length,
       turnCount: session.turns.length,
+      // Full conversation turns for the transcript UI
+      turns: session.turns,
     },
   });
 }

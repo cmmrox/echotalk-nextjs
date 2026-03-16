@@ -60,6 +60,8 @@ export type FullSessionSnapshot = {
       delivered?: boolean;
       deliveredAt?: string;
     } | null;
+    /** Full conversation turn history for the transcript UI */
+    turns?: Array<{ role: string; text: string; language?: string }>;
     eventCount: number;
     turnCount: number;
   };

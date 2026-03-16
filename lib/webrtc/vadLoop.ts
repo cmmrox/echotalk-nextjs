@@ -1,6 +1,8 @@
 export type VadLoopCallbacks = {
   onSpeechStart: () => void;
   onSpeechEnd: () => void;
+  /** Called every animation frame with the current mic peak level (0–127). */
+  onVolumeChange?: (level: number) => void;
 };
 
 export type VadLoopOptions = {
@@ -47,6 +49,9 @@ export class VadLoop {
         if (value > peak) peak = value;
       }
 
+      // Emit volume level every frame for the mic meter UI.
+      this.callbacks.onVolumeChange?.(peak);
+
       const now = performance.now();
 
       if (peak >= this.threshold) {
@@ -76,5 +81,7 @@ export class VadLoop {
       window.cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    // Emit zero so the meter resets when stopped.
+    this.callbacks.onVolumeChange?.(0);
   }
 }

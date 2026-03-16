@@ -103,6 +103,7 @@ export function buildOggOpus(
   let sequenceNumber = 0;
 
   // --- OpusHead (ID header, first page, BOS) ---
+  // RFC 7845 §5.2: granule position of the ID header page MUST be 0.
   const opusHead = Buffer.alloc(19);
   opusHead.write("OpusHead", 0, "ascii");
   opusHead[8] = 1; // version
@@ -113,10 +114,11 @@ export function buildOggOpus(
   opusHead[18] = 0; // channel mapping family (simple stereo/mono)
 
   pages.push(
-    buildOggPage([opusHead], -1n, serialNumber, sequenceNumber++, HEADER_BOS)
+    buildOggPage([opusHead], 0n, serialNumber, sequenceNumber++, HEADER_BOS)
   );
 
   // --- OpusTags (comment header, second page) ---
+  // RFC 7845: comment header page granule position is also 0.
   const vendor = "EchoTalk";
   const opusTags = Buffer.alloc(8 + 4 + vendor.length + 4);
   opusTags.write("OpusTags", 0, "ascii");
@@ -125,7 +127,7 @@ export function buildOggOpus(
   opusTags.writeUInt32LE(0, 12 + vendor.length); // zero user comments
 
   pages.push(
-    buildOggPage([opusTags], -1n, serialNumber, sequenceNumber++, 0x00)
+    buildOggPage([opusTags], 0n, serialNumber, sequenceNumber++, 0x00)
   );
 
   if (frames.length === 0) {

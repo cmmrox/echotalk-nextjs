@@ -6,89 +6,162 @@ import { Button } from "@/components/ui/button";
 import { FullWebRtcClientSession } from "@/lib/webrtc/fullClientSession";
 import { VadLoop } from "@/lib/webrtc/vadLoop";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 type LiveSessionPanelProps = {
   onError?: (message: string | null) => void;
 };
 
-type SessionViewState =
+type SessionPhase =
   | "idle"
   | "starting"
-  | "signaling"
   | "connected"
-  | "polling"
-  | "capturing"
-  | "processing"
+  | "capturing"   // user is speaking
+  | "processing"  // waiting for STT / agent / TTS
+  | "speaking"    // AI audio playing
   | "error";
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  language?: string;
+  turnNumber?: number;
+};
+
+type TelemetrySnapshot = {
+  hasInboundTrack: boolean;
+  inboundTrack?: {
+    kind: string;
+    receivedRtpPackets: number;
+    receivedBytes: number;
+  } | null;
+  segmentation?: { packetCount: number; totalBytes: number; completedTurns: number } | null;
+  processing?: { queued: boolean; processing: boolean; processedTurns: number } | null;
+  latestResult?: {
+    turnNumber: number;
+    transcript: string;
+    detectedLanguage: string;
+    replyText: string;
+    replyLanguage: string;
+    createdAt: string;
+  } | null;
+  outboundAudio?: {
+    ready: boolean;
+    turnNumber?: number;
+    contentType?: string;
+    createdAt?: string;
+  } | null;
+  turns?: Array<{ role: string; text: string; language?: string }>;
+  eventCount: number;
+  turnCount: number;
+};
+
+// ---------------------------------------------------------------------------
+// Mic level bar
+// ---------------------------------------------------------------------------
+
+function MicLevelBar({ level, active }: { level: number; active: boolean }) {
+  // level is 0-127; normalise to 0-100%
+  const pct = Math.min(100, Math.round((level / 80) * 100));
+  const color =
+    !active ? "bg-muted"
+    : pct > 75 ? "bg-red-500"
+    : pct > 40 ? "bg-yellow-400"
+    : pct > 8  ? "bg-green-500"
+    : "bg-muted";
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground w-7 shrink-0">Mic</span>
+      <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-75 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs text-muted-foreground w-6 text-right shrink-0">
+        {active ? pct : "—"}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase label
+// ---------------------------------------------------------------------------
+
+function PhaseLabel({ phase }: { phase: SessionPhase }) {
+  const map: Record<SessionPhase, { label: string; color: string }> = {
+    idle:       { label: "Idle",        color: "text-muted-foreground" },
+    starting:   { label: "Connecting…", color: "text-yellow-600 dark:text-yellow-400" },
+    connected:  { label: "Listening",   color: "text-green-600 dark:text-green-400" },
+    capturing:  { label: "🎙 Speaking…", color: "text-blue-600 dark:text-blue-400" },
+    processing: { label: "⏳ Thinking…", color: "text-orange-500" },
+    speaking:   { label: "🔊 Speaking…", color: "text-purple-600 dark:text-purple-400" },
+    error:      { label: "Error",       color: "text-destructive" },
+  };
+  const { label, color } = map[phase];
+  return <span className={`text-xs font-medium ${color}`}>{label}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// Chat bubble
+// ---------------------------------------------------------------------------
+
+function ChatBubble({ msg }: { msg: ChatMessage }) {
+  const isUser = msg.role === "user";
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-snug shadow-sm
+          ${isUser
+            ? "rounded-br-sm bg-blue-600 text-white"
+            : "rounded-bl-sm bg-muted text-foreground border"
+          }`}
+      >
+        <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+        {msg.language ? (
+          <p className={`mt-1 text-[10px] ${isUser ? "text-blue-200" : "text-muted-foreground"}`}>
+            {msg.language}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
-  const fullSessionRef = React.useRef<FullWebRtcClientSession | null>(null);
-  const vadRef = React.useRef<VadLoop | null>(null);
-  const audioContextRef = React.useRef<AudioContext | null>(null);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const ttsAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const fullSessionRef    = React.useRef<FullWebRtcClientSession | null>(null);
+  const vadRef            = React.useRef<VadLoop | null>(null);
+  const audioContextRef   = React.useRef<AudioContext | null>(null);
+  const audioRef          = React.useRef<HTMLAudioElement | null>(null);
+  const ttsAudioRef       = React.useRef<HTMLAudioElement | null>(null);
   const lastPlayedTurnRef = React.useRef<number | null>(null);
-  const [state, setState] = React.useState<SessionViewState>("idle");
-  const [sessionId, setSessionId] = React.useState<string>("");
-  const [events, setEvents] = React.useState<
-    Array<{ type: string; at: string; data?: Record<string, unknown> }>
-  >([]);
-  const [telemetry, setTelemetry] = React.useState<{
-    hasInboundTrack: boolean;
-    inboundTrack?: {
-      kind: string;
-      id: string;
-      remote: boolean;
-      muted: boolean;
-      receivedRtpPackets: number;
-      receivedBytes: number;
-      lastPacketAt?: string;
-    } | null;
-    segmentation?: {
-      packetCount: number;
-      totalBytes: number;
-      payloadCount?: number;
-      startedAt?: string;
-      lastPacketAt?: string;
-      completedTurns: number;
-    } | null;
-    turnWindow?: {
-      ready: boolean;
-      packetCount: number;
-      totalBytes: number;
-      completedTurns: number;
-      lastReadyAt?: string;
-    } | null;
-    processing?: {
-      queued: boolean;
-      processing: boolean;
-      processedTurns: number;
-      lastQueuedAt?: string;
-      lastProcessedAt?: string;
-    } | null;
-    latestResult?: {
-      turnNumber: number;
-      transcript: string;
-      detectedLanguage: string;
-      replyText: string;
-      replyLanguage: string;
-      createdAt: string;
-    } | null;
-    latestTts?: {
-      turnNumber: number;
-      contentType: string;
-      createdAt: string;
-    } | null;
-    outboundAudio?: {
-      ready: boolean;
-      turnNumber?: number;
-      contentType?: string;
-      createdAt?: string;
-      delivered?: boolean;
-      deliveredAt?: string;
-    } | null;
-    eventCount: number;
-    turnCount: number;
-  } | null>(null);
+  const chatEndRef        = React.useRef<HTMLDivElement | null>(null);
+
+  const [phase, setPhase]           = React.useState<SessionPhase>("idle");
+  const [sessionId, setSessionId]   = React.useState<string>("");
+  const [micLevel, setMicLevel]     = React.useState<number>(0);
+  const [messages, setMessages]     = React.useState<ChatMessage[]>([]);
+  const [telemetry, setTelemetry]   = React.useState<TelemetrySnapshot | null>(null);
+  const [showDebug, setShowDebug]   = React.useState(false);
+  const [playingTurn, setPlayingTurn] = React.useState<number | null>(null);
+
+  // Scroll to bottom whenever messages change
+  React.useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // ---------------------------------------------------------------------------
+  // Snapshot polling → update messages from server turns
+  // ---------------------------------------------------------------------------
 
   const refreshSnapshot = React.useCallback(async () => {
     const client = fullSessionRef.current;
@@ -97,217 +170,103 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     try {
       const snapshot = await client.fetchSnapshot();
       setSessionId(snapshot.sessionId ?? "");
-      setTelemetry(snapshot.telemetry ?? null);
-      setEvents(
-        (snapshot.events ?? []).map((event) => ({
-          type: event.type,
-          at: event.at,
-          data: event.data,
-        }))
-      );
+
+      const t = snapshot.telemetry ?? null;
+      setTelemetry(t as TelemetrySnapshot | null);
+
+      // Build messages from the server turn list.
+      // Each server turn has role "user" or "assistant".
+      const serverTurns = (t as TelemetrySnapshot | null)?.turns ?? [];
+      if (serverTurns.length > 0) {
+        setMessages(
+          serverTurns.map((turn, idx) => ({
+            id: `turn-${idx}`,
+            role: turn.role === "user" ? "user" : "assistant",
+            text: turn.text,
+            language: turn.language,
+            turnNumber: idx,
+          }))
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       onError?.(message);
-      setState("error");
+      setPhase("error");
     }
   }, [onError]);
+
+  // ---------------------------------------------------------------------------
+  // Audio playback
+  // ---------------------------------------------------------------------------
 
   const playLatestOutboundAudio = React.useCallback(async () => {
     const client = fullSessionRef.current;
     if (!client?.id) return;
-    if (!telemetry?.outboundAudio?.ready) return;
 
-    const turnNumber = telemetry.outboundAudio.turnNumber ?? null;
+    const snap = telemetry;
+    if (!snap?.outboundAudio?.ready) return;
+
+    const turnNumber = snap.outboundAudio.turnNumber ?? null;
     if (!turnNumber || lastPlayedTurnRef.current === turnNumber) return;
-
-    // Mark early to prevent duplicate play attempts while this async fn is in flight.
     lastPlayedTurnRef.current = turnNumber;
 
-    console.log("[live-session-panel] outbound audio fetch", {
-      sessionId: client.id,
-      turnNumber,
-    });
+    setPhase("speaking");
+    setPlayingTurn(turnNumber);
 
     try {
       const res = await fetch(
         `/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1`
       );
-      if (!res.ok) {
-        console.warn("[live-session-panel] outbound fetch failed", {
-          sessionId: client.id,
-          turnNumber,
-          status: res.status,
-        });
-        return;
-      }
+      if (!res.ok) return;
 
       const arrayBuffer = await res.arrayBuffer();
-      const contentType =
-        telemetry.outboundAudio.contentType ?? "audio/mpeg";
+      if (arrayBuffer.byteLength === 0) return;
 
-      console.log("[live-session-panel] outbound audio received", {
-        sessionId: client.id,
-        turnNumber,
-        bytes: arrayBuffer.byteLength,
-        contentType,
-      });
-
-      // Prefer AudioContext playback — it is immune to browser autoplay restrictions
-      // once the AudioContext was created after a user gesture (Start button click).
       const audioContext = audioContextRef.current;
-      if (audioContext && arrayBuffer.byteLength > 0) {
+      if (audioContext) {
+        if (audioContext.state === "suspended") await audioContext.resume();
         try {
-          // Resume in case the browser suspended the context.
-          if (audioContext.state === "suspended") {
-            await audioContext.resume();
-          }
-          const decoded = await audioContext.decodeAudioData(
-            arrayBuffer.slice(0) // slice to avoid detached buffer issues
-          );
+          const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
           const source = audioContext.createBufferSource();
           source.buffer = decoded;
           source.connect(audioContext.destination);
+          source.onended = () => {
+            setPhase("connected");
+            setPlayingTurn(null);
+          };
           source.start(0);
-          console.log("[live-session-panel] AudioContext playback started", {
-            sessionId: client.id,
-            turnNumber,
-            duration: decoded.duration.toFixed(2) + "s",
-          });
           return;
-        } catch (acErr) {
-          console.warn(
-            "[live-session-panel] AudioContext decode failed, falling back to <audio>",
-            acErr
-          );
+        } catch {
+          // fall through to <audio>
         }
       }
 
-      // Fallback: HTMLAudioElement (may be blocked by autoplay policy).
+      // Fallback: HTMLAudioElement
+      const contentType = snap.outboundAudio.contentType ?? "audio/mpeg";
       const blob = new Blob([arrayBuffer], { type: contentType });
-      const url = URL.createObjectURL(blob);
+      const url  = URL.createObjectURL(blob);
       if (ttsAudioRef.current) {
         ttsAudioRef.current.src = url;
         ttsAudioRef.current.onended = () => {
           URL.revokeObjectURL(url);
-          console.log("[live-session-panel] <audio> playback ended", {
-            sessionId: client.id,
-            turnNumber,
-          });
+          setPhase("connected");
+          setPlayingTurn(null);
         };
-        await ttsAudioRef.current.play().catch((playErr) => {
-          console.warn("[live-session-panel] <audio>.play() failed", {
-            sessionId: client.id,
-            turnNumber,
-            error: String(playErr),
-          });
+        await ttsAudioRef.current.play().catch(() => {
           URL.revokeObjectURL(url);
+          setPhase("connected");
+          setPlayingTurn(null);
         });
       }
-    } catch (err) {
-      console.warn("[live-session-panel] playLatestOutboundAudio error", {
-        sessionId: client.id,
-        turnNumber,
-        error: String(err),
-      });
+    } catch {
+      setPhase("connected");
+      setPlayingTurn(null);
     }
   }, [telemetry]);
 
-  async function start() {
-    onError?.(null);
-    setState("starting");
-
-    try {
-      const fullClient = new FullWebRtcClientSession();
-      fullSessionRef.current = fullClient;
-
-      const session = await fullClient.connect();
-      console.log("[live-session-panel] full session connected", {
-        sessionId: session.sessionId,
-      });
-      setSessionId(session.sessionId);
-      setState("signaling");
-
-      const remoteStream = fullClient.getRemoteStream();
-      if (audioRef.current && remoteStream) {
-        audioRef.current.srcObject = remoteStream;
-        audioRef.current.autoplay = true;
-        audioRef.current.playsInline = true;
-      }
-
-      const localStream = fullClient.getLocalStream();
-      if (!localStream) {
-        throw new Error("Local media stream is not available");
-      }
-
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-
-      // Full media-service mode: use VAD to trigger server-side turn processing
-      // the moment the user stops speaking — instead of waiting for the fixed
-      // 300-packet (~6s) time window. This cuts response latency dramatically.
-      vadRef.current = new VadLoop(audioContext, localStream, {
-        onSpeechStart: () => {
-          console.log("[live-session-panel] local speech detected start", {
-            sessionId: session.sessionId,
-          });
-          setState("capturing");
-        },
-        onSpeechEnd: () => {
-          console.log("[live-session-panel] local speech detected end", {
-            sessionId: session.sessionId,
-          });
-          setState("processing");
-
-          // Trigger server-side STT immediately now that the user has stopped.
-          fetch(
-            `/api/media-service/trigger-turn?sessionId=${session.sessionId}`,
-            { method: "POST" }
-          )
-            .then((r) => r.json())
-            .then((data) => {
-              console.log("[live-session-panel] trigger-turn response", data);
-            })
-            .catch((err) => {
-              console.warn("[live-session-panel] trigger-turn failed", err);
-            })
-            .finally(() => {
-              setState("connected");
-            });
-        },
-      });
-      vadRef.current.start();
-
-      setState("connected");
-      await refreshSnapshot();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      onError?.(message);
-      setState("error");
-    }
-  }
-
-  async function stop() {
-    try {
-      setState("idle");
-      vadRef.current?.stop();
-      vadRef.current = null;
-      await audioContextRef.current?.close().catch(() => undefined);
-      audioContextRef.current = null;
-      await fullSessionRef.current?.stop();
-      fullSessionRef.current = null;
-      setSessionId("");
-      setEvents([]);
-      setTelemetry(null);
-      lastPlayedTurnRef.current = null;
-      if (audioRef.current) {
-        audioRef.current.srcObject = null;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      onError?.(message);
-      setState("error");
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Polling interval
+  // ---------------------------------------------------------------------------
 
   React.useEffect(() => {
     if (!sessionId || !fullSessionRef.current) return;
@@ -317,11 +276,85 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
       void playLatestOutboundAudio();
     }, 500);
 
-    return () => {
-      window.clearInterval(interval);
-    };
+    return () => window.clearInterval(interval);
   }, [playLatestOutboundAudio, refreshSnapshot, sessionId]);
 
+  // ---------------------------------------------------------------------------
+  // Start / Stop
+  // ---------------------------------------------------------------------------
+
+  async function start() {
+    onError?.(null);
+    setPhase("starting");
+    setMessages([]);
+    lastPlayedTurnRef.current = null;
+
+    try {
+      const fullClient = new FullWebRtcClientSession();
+      fullSessionRef.current = fullClient;
+
+      const session = await fullClient.connect();
+      setSessionId(session.sessionId);
+
+      const remoteStream = fullClient.getRemoteStream();
+      if (audioRef.current && remoteStream) {
+        audioRef.current.srcObject = remoteStream;
+        audioRef.current.autoplay = true;
+      }
+
+      const localStream = fullClient.getLocalStream();
+      if (!localStream) throw new Error("Local media stream not available");
+
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+
+      vadRef.current = new VadLoop(audioContext, localStream, {
+        onVolumeChange: (level) => setMicLevel(level),
+        onSpeechStart: () => setPhase("capturing"),
+        onSpeechEnd: () => {
+          setPhase("processing");
+          fetch(`/api/media-service/trigger-turn?sessionId=${session.sessionId}`, {
+            method: "POST",
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              console.log("[live-session-panel] trigger-turn", data);
+            })
+            .catch(console.warn)
+            .finally(() => {
+              // Return to listening unless audio is already playing
+              setPhase((prev) => prev === "processing" ? "connected" : prev);
+            });
+        },
+      });
+      vadRef.current.start();
+
+      setPhase("connected");
+      await refreshSnapshot();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      onError?.(message);
+      setPhase("error");
+    }
+  }
+
+  async function stop() {
+    vadRef.current?.stop();
+    vadRef.current = null;
+    setMicLevel(0);
+    await audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
+    await fullSessionRef.current?.stop();
+    fullSessionRef.current = null;
+    setSessionId("");
+    setTelemetry(null);
+    setPlayingTurn(null);
+    lastPlayedTurnRef.current = null;
+    if (audioRef.current) audioRef.current.srcObject = null;
+    setPhase("idle");
+  }
+
+  // Cleanup on unmount
   React.useEffect(() => {
     return () => {
       vadRef.current?.stop();
@@ -330,122 +363,105 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     };
   }, []);
 
-  const isActive = state !== "idle" && state !== "error";
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  const isActive = phase !== "idle" && phase !== "error";
 
   return (
-    <div className="w-full rounded-md border p-3 text-sm">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-medium">Live WebRTC Session</p>
-            <p className="text-xs text-muted-foreground">
-              UI status: <span className="font-medium">{state}</span>
+    <div className="w-full flex flex-col gap-3">
+      {/* ── Header row ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Live Conversation</p>
+          {sessionId ? (
+            <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[220px]">
+              {sessionId}
             </p>
-            {sessionId ? (
-              <p className="text-xs text-muted-foreground break-all">
-                Session ID: {sessionId}
-              </p>
-            ) : null}
-          </div>
-
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <PhaseLabel phase={phase} />
           {isActive ? (
-            <Button onClick={stop} variant="destructive">
-              Stop Conversation
+            <Button size="sm" variant="destructive" onClick={stop}>
+              Stop
             </Button>
           ) : (
-            <Button onClick={start}>Start Conversation</Button>
+            <Button size="sm" onClick={start}>
+              Start Conversation
+            </Button>
           )}
         </div>
-
-        <audio ref={audioRef} hidden />
-        <audio ref={ttsAudioRef} hidden />
-
-        {telemetry ? (
-          <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-            <p className="font-medium">Media service telemetry</p>
-            <p className="mt-1">
-              Inbound track attached: {telemetry.hasInboundTrack ? "yes" : "no"}
-            </p>
-            <p>Event count: {telemetry.eventCount}</p>
-            <p>Turn count: {telemetry.turnCount}</p>
-            {telemetry.inboundTrack ? (
-              <div className="mt-2 space-y-1">
-                <p>Track kind: {telemetry.inboundTrack.kind}</p>
-                <p>Track id: {telemetry.inboundTrack.id}</p>
-                <p>RTP packets: {telemetry.inboundTrack.receivedRtpPackets}</p>
-                <p>RTP bytes: {telemetry.inboundTrack.receivedBytes}</p>
-              </div>
-            ) : null}
-            {telemetry.segmentation ? (
-              <div className="mt-2 space-y-1">
-                <p>Segment packets: {telemetry.segmentation.packetCount}</p>
-                <p>Segment bytes: {telemetry.segmentation.totalBytes}</p>
-                <p>Completed windows: {telemetry.segmentation.completedTurns}</p>
-                <p>Payload packets: {telemetry.segmentation.payloadCount ?? 0}</p>
-              </div>
-            ) : null}
-            {telemetry.turnWindow ? (
-              <div className="mt-2 space-y-1">
-                <p>Turn ready: {telemetry.turnWindow.ready ? "yes" : "no"}</p>
-                <p>Turn packets: {telemetry.turnWindow.packetCount}</p>
-                <p>Turn bytes: {telemetry.turnWindow.totalBytes}</p>
-              </div>
-            ) : null}
-            {telemetry.processing ? (
-              <div className="mt-2 space-y-1">
-                <p>Queued: {telemetry.processing.queued ? "yes" : "no"}</p>
-                <p>Processing: {telemetry.processing.processing ? "yes" : "no"}</p>
-                <p>Processed turns: {telemetry.processing.processedTurns}</p>
-              </div>
-            ) : null}
-            {telemetry.latestResult ? (
-              <div className="mt-2 space-y-1">
-                <p>Latest result turn: {telemetry.latestResult.turnNumber}</p>
-                <p>Latest transcript: {telemetry.latestResult.transcript}</p>
-                <p>Latest reply: {telemetry.latestResult.replyText}</p>
-              </div>
-            ) : null}
-            {telemetry.latestTts ? (
-              <div className="mt-2 space-y-1">
-                <p>Latest TTS turn: {telemetry.latestTts.turnNumber}</p>
-                <p>TTS content type: {telemetry.latestTts.contentType}</p>
-              </div>
-            ) : null}
-            {telemetry.outboundAudio ? (
-              <div className="mt-2 space-y-1">
-                <p>Outbound audio ready: {telemetry.outboundAudio.ready ? "yes" : "no"}</p>
-                <p>Outbound turn: {telemetry.outboundAudio.turnNumber ?? "-"}</p>
-                <p>Outbound type: {telemetry.outboundAudio.contentType ?? "-"}</p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {events.length ? (
-          <div className="rounded-md border bg-muted/20 p-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              Session events
-            </p>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-              {events.slice(-8).reverse().map((event, index) => (
-                <li key={`${event.at}-${event.type}-${index}`}>
-                  <span className="font-medium">{event.type}</span> ·{" "}
-                  {new Date(event.at).toLocaleTimeString()}
-                  {event.data ? (
-                    <span className="block opacity-80">
-                      {JSON.stringify(event.data)}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No live events yet. Start a session to initialize WebRTC signaling and watch server events here.
-          </p>
-        )}
       </div>
+
+      {/* ── Mic level meter (only when active) ── */}
+      {isActive ? (
+        <MicLevelBar level={micLevel} active={isActive} />
+      ) : null}
+
+      {/* ── Chat transcript ── */}
+      {messages.length > 0 ? (
+        <div className="flex flex-col gap-2 max-h-80 overflow-y-auto rounded-xl border bg-card p-3">
+          {messages.map((msg) => (
+            <ChatBubble key={msg.id} msg={msg} />
+          ))}
+          {/* Show a "processing" placeholder while waiting */}
+          {phase === "processing" ? (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-bl-sm bg-muted border px-3.5 py-2 text-sm text-muted-foreground animate-pulse">
+                Thinking…
+              </div>
+            </div>
+          ) : null}
+          {playingTurn ? (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-bl-sm bg-purple-100 dark:bg-purple-900/30 border px-3.5 py-2 text-xs text-purple-700 dark:text-purple-300">
+                🔊 Speaking (turn {playingTurn})…
+              </div>
+            </div>
+          ) : null}
+          <div ref={chatEndRef} />
+        </div>
+      ) : isActive ? (
+        <div className="rounded-xl border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+          Speak clearly into your microphone.<br />
+          <span className="text-xs">The mic bar above should move when you speak.</span>
+        </div>
+      ) : null}
+
+      {/* ── Hidden audio elements ── */}
+      <audio ref={audioRef} hidden />
+      <audio ref={ttsAudioRef} hidden />
+
+      {/* ── Debug section (collapsed) ── */}
+      {isActive || messages.length > 0 ? (
+        <div>
+          <button
+            type="button"
+            className="text-[10px] text-muted-foreground underline underline-offset-2"
+            onClick={() => setShowDebug((v) => !v)}
+          >
+            {showDebug ? "Hide debug" : "Show debug"}
+          </button>
+          {showDebug && telemetry ? (
+            <div className="mt-2 rounded-md border bg-muted/20 p-2 text-[10px] text-muted-foreground space-y-0.5 font-mono">
+              <p>Track: {telemetry.hasInboundTrack ? "✅" : "❌"} | RTP: {telemetry.inboundTrack?.receivedRtpPackets ?? 0} pkts</p>
+              <p>Turns completed: {telemetry.segmentation?.completedTurns ?? 0} | Processed: {telemetry.processing?.processedTurns ?? 0}</p>
+              <p>Processing: {telemetry.processing?.processing ? "yes" : "no"} | Queued: {telemetry.processing?.queued ? "yes" : "no"}</p>
+              {telemetry.latestResult ? (
+                <>
+                  <p>Last STT: &quot;{telemetry.latestResult.transcript.slice(0, 60)}&quot;</p>
+                  <p>Last reply ({telemetry.latestResult.replyLanguage}): &quot;{telemetry.latestResult.replyText.slice(0, 60)}&quot;</p>
+                </>
+              ) : null}
+              {telemetry.outboundAudio?.ready ? (
+                <p>Audio ready: turn {telemetry.outboundAudio.turnNumber} ({telemetry.outboundAudio.contentType})</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
