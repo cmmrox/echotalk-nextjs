@@ -63,11 +63,19 @@ type TelemetrySnapshot = {
 // Mic level bar
 // ---------------------------------------------------------------------------
 
-function MicLevelBar({ level, active }: { level: number; active: boolean }) {
+function MicLevelBar({
+  level,
+  active,
+  muted,
+}: {
+  level: number;
+  active: boolean;
+  muted: boolean;
+}) {
   // level is 0-127; normalise to 0-100%
   const pct = Math.min(100, Math.round((level / 80) * 100));
   const color =
-    !active ? "bg-muted"
+    !active || muted ? "bg-muted"
     : pct > 75 ? "bg-red-500"
     : pct > 40 ? "bg-yellow-400"
     : pct > 8  ? "bg-green-500"
@@ -75,15 +83,17 @@ function MicLevelBar({ level, active }: { level: number; active: boolean }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground w-7 shrink-0">Mic</span>
+      <span className={`text-xs w-7 shrink-0 ${muted ? "text-orange-500" : "text-muted-foreground"}`}>
+        {muted ? "🔇" : "Mic"}
+      </span>
       <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-75 ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-muted-foreground w-6 text-right shrink-0">
-        {active ? pct : "—"}
+      <span className={`text-xs w-14 text-right shrink-0 ${muted ? "text-orange-500" : "text-muted-foreground"}`}>
+        {muted ? "AI speaking" : active ? `${pct}%` : "—"}
       </span>
     </div>
   );
@@ -149,6 +159,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   const [phase, setPhase]           = React.useState<SessionPhase>("idle");
   const [sessionId, setSessionId]   = React.useState<string>("");
   const [micLevel, setMicLevel]     = React.useState<number>(0);
+  const [vadMuted, setVadMuted]     = React.useState<boolean>(false);
   const [messages, setMessages]     = React.useState<ChatMessage[]>([]);
   const [telemetry, setTelemetry]   = React.useState<TelemetrySnapshot | null>(null);
   const [showDebug, setShowDebug]   = React.useState(false);
@@ -196,6 +207,23 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   }, [onError]);
 
   // ---------------------------------------------------------------------------
+  // Turn-taking helpers
+  // ---------------------------------------------------------------------------
+
+  /** Tell the server to stop/start accepting new speech turns. */
+  const setServerListening = React.useCallback(
+    (listening: boolean, sessionIdOverride?: string) => {
+      const id = sessionIdOverride ?? fullSessionRef.current?.id;
+      if (!id) return;
+      fetch(
+        `/api/media-service/set-listening?sessionId=${id}&listening=${listening ? 1 : 0}`,
+        { method: "POST" }
+      ).catch(console.warn);
+    },
+    []
+  );
+
+  // ---------------------------------------------------------------------------
   // Audio playback
   // ---------------------------------------------------------------------------
 
@@ -213,31 +241,48 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     setPhase("speaking");
     setPlayingTurn(turnNumber);
 
+    // ── Turn-taking: mute mic + tell server to discard incoming audio ──
+    vadRef.current?.mute();
+    setVadMuted(true);
+    setServerListening(false);
+
+    /** Called when playback finishes (any path). */
+    const onPlaybackDone = () => {
+      setPhase("connected");
+      setPlayingTurn(null);
+      // ── Unmute mic + re-enable server listening ──
+      vadRef.current?.unmute();
+      setVadMuted(false);
+      setServerListening(true);
+    };
+
     try {
       const res = await fetch(
         `/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1`
       );
-      if (!res.ok) return;
+      if (!res.ok) { onPlaybackDone(); return; }
 
       const arrayBuffer = await res.arrayBuffer();
-      if (arrayBuffer.byteLength === 0) return;
+      if (arrayBuffer.byteLength === 0) { onPlaybackDone(); return; }
 
       const audioContext = audioContextRef.current;
       if (audioContext) {
         if (audioContext.state === "suspended") await audioContext.resume();
         try {
           const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
-          const source = audioContext.createBufferSource();
+          const source  = audioContext.createBufferSource();
           source.buffer = decoded;
           source.connect(audioContext.destination);
-          source.onended = () => {
-            setPhase("connected");
-            setPlayingTurn(null);
-          };
+          source.onended = onPlaybackDone;
           source.start(0);
+          console.log("[live-session-panel] AudioContext playback started", {
+            sessionId: client.id,
+            turnNumber,
+            duration: decoded.duration.toFixed(2) + "s",
+          });
           return;
-        } catch {
-          // fall through to <audio>
+        } catch (err) {
+          console.warn("[live-session-panel] AudioContext decode failed, trying <audio>", err);
         }
       }
 
@@ -247,22 +292,15 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
       const url  = URL.createObjectURL(blob);
       if (ttsAudioRef.current) {
         ttsAudioRef.current.src = url;
-        ttsAudioRef.current.onended = () => {
-          URL.revokeObjectURL(url);
-          setPhase("connected");
-          setPlayingTurn(null);
-        };
-        await ttsAudioRef.current.play().catch(() => {
-          URL.revokeObjectURL(url);
-          setPhase("connected");
-          setPlayingTurn(null);
-        });
+        ttsAudioRef.current.onended = () => { URL.revokeObjectURL(url); onPlaybackDone(); };
+        await ttsAudioRef.current.play().catch(() => { URL.revokeObjectURL(url); onPlaybackDone(); });
+      } else {
+        onPlaybackDone();
       }
     } catch {
-      setPhase("connected");
-      setPlayingTurn(null);
+      onPlaybackDone();
     }
-  }, [telemetry]);
+  }, [telemetry, setServerListening]);
 
   // ---------------------------------------------------------------------------
   // Polling interval
@@ -342,6 +380,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     vadRef.current?.stop();
     vadRef.current = null;
     setMicLevel(0);
+    setVadMuted(false);
     await audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
     await fullSessionRef.current?.stop();
@@ -397,7 +436,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
       {/* ── Mic level meter (only when active) ── */}
       {isActive ? (
-        <MicLevelBar level={micLevel} active={isActive} />
+        <MicLevelBar level={micLevel} active={isActive} muted={vadMuted} />
       ) : null}
 
       {/* ── Chat transcript ── */}

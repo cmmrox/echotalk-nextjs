@@ -22,6 +22,8 @@ export class VadLoop {
   private silenceMs: number;
   private minSpeechMs: number;
   private callbacks: VadLoopCallbacks;
+  /** When true, VAD doesn't fire speech events (used during AI playback). */
+  private _muted = false;
 
   constructor(
     audioContext: AudioContext,
@@ -40,6 +42,34 @@ export class VadLoop {
     this.minSpeechMs = options?.minSpeechMs ?? 400;
   }
 
+  get muted() {
+    return this._muted;
+  }
+
+  /**
+   * Mute the VAD: volume meter emits 0 and speech events are suppressed.
+   * Call before AI audio playback starts to prevent the mic picking up speaker
+   * audio and triggering a new STT turn.
+   */
+  mute() {
+    this._muted = true;
+    // If we were mid-speech, reset so we don't fire a stale onSpeechEnd later.
+    this.speaking = false;
+    this.lastAboveThresholdAt = 0;
+    this.callbacks.onVolumeChange?.(0);
+  }
+
+  /**
+   * Unmute the VAD: normal speech detection resumes.
+   * Call after AI audio playback ends.
+   */
+  unmute() {
+    this._muted = false;
+    // Reset internal timers so a fresh listen cycle begins immediately.
+    this.speaking = false;
+    this.lastAboveThresholdAt = 0;
+  }
+
   start() {
     const tick = () => {
       this.analyser.getByteTimeDomainData(this.data);
@@ -47,6 +77,13 @@ export class VadLoop {
       for (let i = 0; i < this.data.length; i += 1) {
         const value = Math.abs(this.data[i] - 128);
         if (value > peak) peak = value;
+      }
+
+      if (this._muted) {
+        // Emit 0 to keep the mic bar showing "muted" state.
+        this.callbacks.onVolumeChange?.(0);
+        this.rafId = window.requestAnimationFrame(tick);
+        return;
       }
 
       // Emit volume level every frame for the mic meter UI.
@@ -81,6 +118,7 @@ export class VadLoop {
       window.cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    this._muted = false;
     // Emit zero so the meter resets when stopped.
     this.callbacks.onVolumeChange?.(0);
   }

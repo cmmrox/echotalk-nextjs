@@ -8,6 +8,7 @@ import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { isSessionListening } from "@/media-service/listeningState";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,12 @@ export async function POST(req: Request) {
       { error: "bad_request", message: "Missing sessionId" },
       { status: 400 }
     );
+  }
+
+  // Block turn processing while the AI is speaking (echo prevention).
+  if (!isSessionListening(sessionId)) {
+    console.log("[media-service/trigger-turn] blocked — AI speaking", { sessionId });
+    return NextResponse.json({ triggered: false, reason: "ai_speaking" });
   }
 
   const finalized = finalizeSegmentIfPending(sessionId);

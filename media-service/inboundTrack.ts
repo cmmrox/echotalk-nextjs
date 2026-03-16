@@ -9,6 +9,7 @@ import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { isSessionListening } from "@/media-service/listeningState";
 
 export function attachInboundTrackObserver(params: {
   sessionId: string;
@@ -104,6 +105,20 @@ export function attachInboundTrackObserver(params: {
       if (observer.receivedRtpPackets % 300 === 0) {
         const finalized = finalizeSegment(sessionId);
         const turnNumber = finalized.completedTurns;
+
+        // Skip processing if the AI is currently speaking — discard this window
+        // so we don't accidentally transcribe the AI's own voice from the mic.
+        if (!isSessionListening(sessionId)) {
+          console.log("[media-service/inboundTrack] segment discarded (AI speaking)", {
+            sessionId,
+            frameCount: finalized.frames.length,
+          });
+          pushMediaSessionEvent(sessionId, "segment_discarded_ai_speaking", {
+            frameCount: finalized.frames.length,
+          });
+          return;
+        }
+
         console.log("[media-service/inboundTrack] segment window completed", {
           sessionId,
           turnNumber,
