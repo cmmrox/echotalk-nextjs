@@ -43,3 +43,106 @@
 ✅ Done
 - Plan: impl-plans/plan-09-stt-v2-auto-language.md
 - Log: impl-logs/log-09-stt-v2-auto-language.md
+
+## Stage 10 — WebRTC architecture and contracts
+🔄 In Progress
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+- Saving approved WebRTC-specific implementation plan
+- Starting signaling + proof-of-concept work
+
+## Stage 11 — Signaling layer
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 12 — Browser WebRTC client
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 13 — Server WebRTC peer and inbound audio handling
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 14 — Live audio frame pipeline
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 15 — Server-side VAD / utterance segmentation
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 16 — Google STT integration for segmented turns
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 17 — Persistent conversation memory and OpenAI turn handling
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 18 — Google TTS synthesis and outbound WebRTC audio
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 19 — Turn-taking control and echo prevention
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 20 — Live conversation UI redesign
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 21 — Error handling, teardown, and recovery
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 22 — Documentation and polish
+⏳ Not Started
+- Plan: impl-plans/plan-10-webrtc-live-conversation.md
+
+## Stage 23 — Full WebRTC architecture update
+🔄 In Progress
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+- New major phase to replace hybrid live mode with true end-to-end WebRTC transport
+
+## Stage 24 — Dedicated media service scaffold
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 25 — Signaling integration with media service
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 26 — Direct inbound track ingest
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 27 — Server-side VAD / utterance segmentation from live track
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 28 — STT integration from direct media buffers
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 29 — Conversation memory + agent turn generation
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 30 — Outbound assistant audio over WebRTC
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 31 — Turn-taking / duplex control
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 32 — Client/UI alignment with pure WebRTC flow
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 33 — Cleanup of hybrid path
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+## Stage 34 — Reliability hardening and docs
+⏳ Not Started
+- Plan: impl-plans/plan-11-full-webrtc-media-service.md

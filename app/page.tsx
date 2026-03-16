@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { LiveSessionPanel } from "@/components/echo/live-session-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -457,6 +458,8 @@ export default function Home() {
                 ) : null}
               </div>
             ) : null}
+
+            <LiveSessionPanel onError={setErrorMessage} />
 
             {errorMessage ? (
               <p className="text-center text-sm text-destructive">
