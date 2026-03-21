@@ -5,7 +5,7 @@ import { appendStoredTtsAudio } from "@/media-service/ttsStore";
 import {
   getLatestTurnAudio,
 } from "@/media-service/turnAudioStore";
-import { clearTurnReady, getTurnWindow } from "@/media-service/turnState";
+import { clearTurnReady, getTurnWindow, markTurnReady } from "@/media-service/turnState";
 import {
   appendMediaTurn,
   getMediaSession,
@@ -28,6 +28,8 @@ type ProcessingState = {
   processedTurns: number;
   lastQueuedAt?: string;
   lastProcessedAt?: string;
+  /** A turn arrived while we were busy — process it immediately after current finishes. */
+  pendingTurnStored: boolean;
 };
 
 declare global {
@@ -57,6 +59,7 @@ function getProcessingState(sessionId: string): ProcessingState {
     queued: false,
     processing: false,
     processedTurns: 0,
+    pendingTurnStored: false,
   };
   store.bySession.set(sessionId, created);
   return created;
@@ -91,21 +94,27 @@ async function runStubStt(sessionId: string, turnNumber: number) {
     firstFrameHex,
   });
 
-  // Bug 3 fix: skip STT entirely if there are fewer than 30 voice frames
-  // (< 0.6s of actual speech). These are almost certainly silence or AEC
-  // residue from the AI's own speech — sending them to STT wastes quota and
-  // causes confusing empty-transcript turns.
-  if (voiceFrames < 30) {
-    console.log("[media-service/processing] skipping STT — insufficient voice frames", {
+  // Fix 2: tighten the voice detection gate.
+  //   - Require at least 60 voice frames (≥ 1.2s of real speech, up from 30)
+  //   - Require average frame size ≥ 20 bytes (ambient noise typically < 20 bytes;
+  //     real speech Opus frames are usually 50–100 bytes each)
+  // Frames that pass frame-size > 5 but are actually background noise will now
+  // be caught by the avgFrameSize check, preventing wasted STT quota and silent turns.
+  const isLikelySpeech = voiceFrames >= 60 && avgFrameSize >= 20;
+  if (!isLikelySpeech) {
+    console.log("[media-service/processing] skipping STT — likely not speech", {
       sessionId,
       turnNumber,
       voiceFrames,
       silenceFrames,
+      avgFrameSize: Number(avgFrameSize.toFixed(1)),
+      reason: voiceFrames < 60 ? "too few voice frames (<60)" : "avg frame too small (<20 bytes)",
     });
     pushMediaSessionEvent(sessionId, "processing_stt_skipped_silence", {
       turnNumber,
       voiceFrames,
       silenceFrames,
+      avgFrameSize,
     });
     return {
       transcript: "",
@@ -196,7 +205,17 @@ export function queueTurnIfReady(sessionId: string) {
     queued: processing.queued,
   });
 
-  if (!turnWindow.ready || processing.processing || processing.queued) {
+  if (!turnWindow.ready) {
+    return processing;
+  }
+
+  // Fix 1: if already busy, remember that a new turn is waiting instead of dropping it.
+  if (processing.processing || processing.queued) {
+    if (!processing.pendingTurnStored) {
+      processing.pendingTurnStored = true;
+      console.log("[media-service/processing] turn queued as pending (busy)", { sessionId });
+      pushMediaSessionEvent(sessionId, "processing_turn_pending_while_busy", {});
+    }
     return processing;
   }
 
@@ -439,6 +458,23 @@ export function queueTurnIfReady(sessionId: string) {
       latestResult: result,
       latestTts,
     });
+
+    // Fix 1: if a turn arrived while we were busy, process it now.
+    if (current.pendingTurnStored) {
+      current.pendingTurnStored = false;
+      console.log("[media-service/processing] processing pending turn now", { sessionId });
+      pushMediaSessionEvent(sessionId, "processing_deferred_turn_start", {});
+      // Re-read the latest stored turn audio and kick off a fresh run.
+      const pendingTurnWindow = getTurnWindow(sessionId);
+      if (pendingTurnWindow.packetCount > 0) {
+        markTurnReady(sessionId, {
+          packetCount: pendingTurnWindow.packetCount,
+          totalBytes: pendingTurnWindow.totalBytes,
+          completedTurns: pendingTurnWindow.completedTurns,
+        });
+        queueTurnIfReady(sessionId);
+      }
+    }
   });
 
   return processing;
