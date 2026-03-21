@@ -13,7 +13,7 @@ export type VadLoopOptions = {
 
 export class VadLoop {
   private analyser: AnalyserNode;
-  private data: Uint8Array;
+  private data: Uint8Array<ArrayBuffer>;
   private rafId: number | null = null;
   private speaking = false;
   private speechStartAt = 0;

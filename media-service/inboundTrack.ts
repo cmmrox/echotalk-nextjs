@@ -1,5 +1,5 @@
 import { queueTurnIfReady } from "@/media-service/processingQueue";
-import { appendSegmentPacket, finalizeSegment, snapshotSegment } from "@/media-service/segmentationBuffer";
+import { appendSegmentPacket, finalizeSegmentIfPending, snapshotSegment } from "@/media-service/segmentationBuffer";
 import {
   appendTurnAudio,
 } from "@/media-service/turnAudioStore";
@@ -103,7 +103,22 @@ export function attachInboundTrackObserver(params: {
       }
 
       if (observer.receivedRtpPackets % 300 === 0) {
-        const finalized = finalizeSegment(sessionId);
+        // Bug 2 fix: use finalizeSegmentIfPending so that if VAD already
+        // processed and cleared the buffer (< 20 frames remaining), this
+        // time-window tick is a harmless no-op instead of re-processing an
+        // almost-empty tail segment.
+        const finalized = finalizeSegmentIfPending(sessionId);
+        if (!finalized) {
+          console.log("[media-service/inboundTrack] 300-packet window skipped (VAD already cleared)", {
+            sessionId,
+            packets: observer.receivedRtpPackets,
+          });
+          pushMediaSessionEvent(sessionId, "segment_window_skipped_vad_cleared", {
+            packets: observer.receivedRtpPackets,
+          });
+          return;
+        }
+
         const turnNumber = finalized.completedTurns;
 
         // Skip processing if the AI is currently speaking — discard this window

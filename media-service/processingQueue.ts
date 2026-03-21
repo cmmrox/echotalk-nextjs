@@ -20,6 +20,7 @@ import {
   getOutboundSender,
   scheduleOutboundAudio,
 } from "@/media-service/outboundAudioTrack";
+import { setSessionListening } from "@/media-service/listeningState";
 
 type ProcessingState = {
   queued: boolean;
@@ -89,6 +90,35 @@ async function runStubStt(sessionId: string, turnNumber: number) {
     firstFewSizes: frameSizes.slice(0, 10),
     firstFrameHex,
   });
+
+  // Bug 3 fix: skip STT entirely if there are fewer than 30 voice frames
+  // (< 0.6s of actual speech). These are almost certainly silence or AEC
+  // residue from the AI's own speech — sending them to STT wastes quota and
+  // causes confusing empty-transcript turns.
+  if (voiceFrames < 30) {
+    console.log("[media-service/processing] skipping STT — insufficient voice frames", {
+      sessionId,
+      turnNumber,
+      voiceFrames,
+      silenceFrames,
+    });
+    pushMediaSessionEvent(sessionId, "processing_stt_skipped_silence", {
+      turnNumber,
+      voiceFrames,
+      silenceFrames,
+    });
+    return {
+      transcript: "",
+      detectedLanguage: "en-US",
+      confidence: null,
+      notes: {
+        sttApi: "v2" as const,
+        model: "stub-skipped-silence",
+        languageCodes: ["en-US"],
+        inputMimeType: mimeType,
+      },
+    };
+  }
 
   // --- DEBUG: dump OGG to /tmp for offline inspection ---
   if (buffer.length > 0) {
@@ -299,6 +329,36 @@ export function queueTurnIfReady(sessionId: string) {
           createdAt: storedTts.createdAt,
         };
 
+        // Always prepare HTTP delivery as a safe fallback, even when WebRTC
+        // delivery is attempted. This lets the client recover automatically if
+        // the remote WebRTC track is negotiated but still produces no audible
+        // sound in the browser.
+        prepareOutboundDelivery(sessionId);
+
+        // Bug 1 fix: immediately block the server-side listening gate so that
+        // RTP packets captured while the AI speaks are not sent to STT.
+        // Previously this relied on the CLIENT polling and sending a HTTP round-
+        // trip (500 ms+ delay) — by which point the mic had already recorded the
+        // AI speech.
+        setSessionListening(sessionId, false);
+        console.log("[media-service/processing] listening gate closed (AI speaking)", {
+          sessionId,
+          turnNumber,
+        });
+        pushMediaSessionEvent(sessionId, "listening_gate_closed", { turnNumber });
+
+        // Safety-net for the HTTP-fallback path: re-enable listening after 8s
+        // in case the client fails to send the listening=1 acknowledgment back.
+        // For the WebRTC path, outboundAudioTrack.finish() re-enables it sooner.
+        setTimeout(() => {
+          setSessionListening(sessionId, true);
+          console.log("[media-service/processing] listening gate reopened (safety timeout)", {
+            sessionId,
+            turnNumber,
+          });
+          pushMediaSessionEvent(sessionId, "listening_gate_reopened_timeout", { turnNumber });
+        }, 8000);
+
         // Attempt WebRTC audio delivery first (real-time, no polling needed).
         const rtcSender = getOutboundSender(sessionId);
         let rtcDelivered = false;
@@ -330,11 +390,6 @@ export function queueTurnIfReady(sessionId: string) {
               err: String(rtcErr),
             });
           }
-        }
-
-        // If WebRTC is unavailable or conversion failed, fall back to HTTP delivery.
-        if (!rtcDelivered) {
-          prepareOutboundDelivery(sessionId);
         }
 
         // Mark outboundAudio so the client knows audio is ready (rtcMode flag

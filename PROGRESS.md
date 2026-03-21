@@ -45,104 +45,123 @@
 - Log: impl-logs/log-09-stt-v2-auto-language.md
 
 ## Stage 10 — WebRTC architecture and contracts
-🔄 In Progress
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 - Saving approved WebRTC-specific implementation plan
 - Starting signaling + proof-of-concept work
 
 ## Stage 11 — Signaling layer
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 12 — Browser WebRTC client
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 13 — Server WebRTC peer and inbound audio handling
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 14 — Live audio frame pipeline
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 15 — Server-side VAD / utterance segmentation
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 16 — Google STT integration for segmented turns
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 17 — Persistent conversation memory and OpenAI turn handling
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 18 — Google TTS synthesis and outbound WebRTC audio
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 19 — Turn-taking control and echo prevention
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 20 — Live conversation UI redesign
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 21 — Error handling, teardown, and recovery
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 22 — Documentation and polish
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-10-webrtc-live-conversation.md
 
 ## Stage 23 — Full WebRTC architecture update
-🔄 In Progress
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 - New major phase to replace hybrid live mode with true end-to-end WebRTC transport
 
 ## Stage 24 — Dedicated media service scaffold
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 25 — Signaling integration with media service
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 26 — Direct inbound track ingest
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 27 — Server-side VAD / utterance segmentation from live track
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 28 — STT integration from direct media buffers
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 29 — Conversation memory + agent turn generation
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 30 — Outbound assistant audio over WebRTC
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 31 — Turn-taking / duplex control
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 32 — Client/UI alignment with pure WebRTC flow
-⏳ Not Started
+✅ Done
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 33 — Cleanup of hybrid path
-⏳ Not Started
+✅ Done
+- Deleted legacy `/api/webrtc/{audio,ice,offer,session}` route files
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
 ## Stage 34 — Reliability hardening and docs
-⏳ Not Started
+✅ Done
+- Server-side listening gate now closes immediately when TTS delivery begins
+  (no longer dependent on client polling + HTTP round-trip)
+- WebRTC playback re-opens listening gate via outboundAudioTrack finish()
+- HTTP fallback path has 8s safety-net timeout to re-open gate
+- DTLS polling loop replaces fixed 200ms wait (up to 3s, 100ms intervals)
+- 300-packet time window uses finalizeSegmentIfPending (no-op if VAD cleared)
+- STT skipped when fewer than 30 voice frames (< 0.6s speech)
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
+
+---
+
+## Known Issues
+
+| # | Area | Description | Workaround |
+|---|------|-------------|------------|
+| 1 | AEC | Chrome's Acoustic Echo Cancellation only partially removes AI speech from mic input at low volumes. AEC-processed residue can still reach STT if it passes the 30-frame threshold. | Turn up speaker volume so AEC suppression is stronger, or use headphones. |
+| 2 | Turn-taking | 300-packet time window (~6s) is the primary segmentation trigger; VAD is a best-effort overlay. Long pauses mid-sentence may split turns. | Speak at a natural pace; avoid very long pauses. |
+| 3 | WebRTC DTLS | DTLS connection may not be ready even after the 3s polling window on very high-latency networks. Outbound audio is silently dropped in that case. | Re-connect the session. |
+| 4 | HTTP fallback | 8s safety-net timeout to re-open the listening gate may be too short for very long AI responses over the HTTP path. | Session will recover on next STT turn. |

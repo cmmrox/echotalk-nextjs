@@ -139,16 +139,38 @@ export class FullWebRtcClientSession {
     });
 
     this.pc.ontrack = (event) => {
-      console.log("[fullClientSession] remote track", {
+      const info = {
         streams: event.streams.length,
         trackKind: event.track?.kind,
         trackId: event.track?.id,
-      });
-      event.streams.forEach((stream) => {
-        stream.getTracks().forEach((track) => {
-          this.remoteStream?.addTrack(track);
+        trackReadyState: event.track?.readyState,
+        trackEnabled: event.track?.enabled,
+        trackMuted: event.track?.muted,
+      };
+      console.log("[fullClientSession] remote track received", info);
+
+      // Report to server so we can diagnose from server logs.
+      fetch("/api/media-service/client-event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "ontrack", sessionId: this.sessionId, ...info }),
+      }).catch(() => {});
+
+      // If the track arrives in a named stream, add it directly.
+      // If not (some werift versions send no streams), add the track itself.
+      if (event.streams.length > 0) {
+        event.streams.forEach((stream) => {
+          stream.getTracks().forEach((track) => {
+            this.remoteStream?.addTrack(track);
+            console.log("[fullClientSession] added track from stream", { kind: track.kind });
+          });
         });
-      });
+      } else if (event.track) {
+        this.remoteStream?.addTrack(event.track);
+        console.log("[fullClientSession] added track directly (no stream)", {
+          kind: event.track.kind,
+        });
+      }
     };
 
     this.pc.onicecandidate = async (event) => {

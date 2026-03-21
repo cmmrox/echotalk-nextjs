@@ -1,46 +1,39 @@
 import { v4 as uuidv4 } from "uuid";
 
 import { getMediaServiceStore } from "@/media-service/store";
+import type { MediaServiceSession } from "@/media-service/store";
 
-export function createMediaSession() {
+// Re-export for convenience so callers don't need two imports
+export type { MediaServiceSession as MediaSession };
+export type MediaTurnResult = NonNullable<MediaServiceSession["latestResult"]>;
+
+// ---------------------------------------------------------------------------
+// CRUD helpers
+// ---------------------------------------------------------------------------
+
+export function createMediaSession(): MediaServiceSession {
   const now = new Date().toISOString();
-  const session = {
+  const session: MediaServiceSession = {
     id: uuidv4(),
     createdAt: now,
     updatedAt: now,
-    status: "created" as const,
-    events: [] as Array<{
-      type: string;
-      at: string;
-      data?: Record<string, unknown>;
-    }>,
-    turns: [] as Array<{
-      role: "user" | "assistant";
-      text: string;
-      language?: string;
-      at: string;
-    }>,
-    inboundTrack: undefined,
-    segmentation: undefined,
-    turnWindow: undefined,
-    processing: undefined,
-    latestResult: undefined,
-    latestTts: undefined,
-    outboundAudio: undefined,
+    status: "created",
+    events: [],
+    turns: [],
   };
 
   getMediaServiceStore().sessions.set(session.id, session);
   return session;
 }
 
-export function getMediaSession(sessionId: string) {
+export function getMediaSession(sessionId: string): MediaServiceSession | undefined {
   return getMediaServiceStore().sessions.get(sessionId);
 }
 
 export function updateMediaSession(
   sessionId: string,
-  patch: Partial<ReturnType<typeof createMediaSession>>
-) {
+  patch: Partial<MediaServiceSession>
+): MediaServiceSession | undefined {
   const session = getMediaServiceStore().sessions.get(sessionId);
   if (!session) return undefined;
   Object.assign(session, patch, { updatedAt: new Date().toISOString() });
@@ -51,7 +44,7 @@ export function pushMediaSessionEvent(
   sessionId: string,
   type: string,
   data?: Record<string, unknown>
-) {
+): MediaServiceSession | undefined {
   const session = getMediaServiceStore().sessions.get(sessionId);
   if (!session) return undefined;
   session.events.push({ type, at: new Date().toISOString(), data });
@@ -64,12 +57,8 @@ export function pushMediaSessionEvent(
 
 export function appendMediaTurn(
   sessionId: string,
-  turn: {
-    role: "user" | "assistant";
-    text: string;
-    language?: string;
-  }
-) {
+  turn: { role: "user" | "assistant"; text: string; language?: string }
+): MediaServiceSession | undefined {
   const session = getMediaServiceStore().sessions.get(sessionId);
   if (!session) return undefined;
   session.turns.push({ ...turn, at: new Date().toISOString() });

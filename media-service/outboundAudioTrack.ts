@@ -17,10 +17,13 @@ import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { setSessionListening } from "@/media-service/listeningState";
 
 // ---------------------------------------------------------------------------
 // Per-session state
 // ---------------------------------------------------------------------------
+
+import { getMediaServiceStore } from "@/media-service/store";
 
 type OutboundState = {
   sender: RTCRtpSender;
@@ -106,6 +109,7 @@ export async function scheduleOutboundAudio(
   // Mark session as speaking
   updateMediaSession(sessionId, { status: "speaking" });
   pushMediaSessionEvent(sessionId, "outbound_rtc_started", {
+    turnNumber: (getMediaServiceStore().sessions.get(sessionId)?.outboundAudio?.turnNumber ?? null),
     frameCount: frames.length,
     durationSeconds: (frames.length * FRAME_DURATION_MS / 1000).toFixed(2),
   });
@@ -117,6 +121,48 @@ export async function scheduleOutboundAudio(
   });
 
   const sender = state.sender;
+  const peerBundle = getMediaServiceStore().peers.get(sessionId);
+  const localTrack = peerBundle?.localAudioTrack;
+
+  // Inspect sender internals to diagnose silent sendRtp no-ops.
+  const senderAny = sender as unknown as {
+    codec?: { mimeType?: string; payloadType?: number };
+    ssrc?: number;
+    dtlsTransport?: { state?: string };
+    sendParameters?: { encodings?: unknown[] };
+  };
+  const codecInfo  = senderAny.codec;
+  const ssrcInfo   = senderAny.ssrc;
+  const dtlsState  = senderAny.dtlsTransport?.state ?? "unknown";
+  console.log("[outboundAudioTrack] sender diagnostics at playback start", {
+    sessionId,
+    codec:     codecInfo ? `${codecInfo.mimeType} pt=${codecInfo.payloadType}` : "NOT SET ⚠️",
+    ssrc:      ssrcInfo  ?? "unknown",
+    dtlsState,
+    hasLocalTrack: Boolean(localTrack),
+  });
+  if (dtlsState !== "connected") {
+    // Bug 4 fix: poll DTLS state every 100ms for up to 3000ms instead of a
+    // blind 200ms sleep, which was too short for slow ICE convergence.
+    console.warn("[outboundAudioTrack] DTLS not connected — polling for up to 3s", { dtlsState });
+    const POLL_INTERVAL_MS = 100;
+    const POLL_MAX_MS = 3000;
+    let waited = 0;
+    while (senderAny.dtlsTransport?.state !== "connected" && waited < POLL_MAX_MS) {
+      await new Promise<void>((r) => setTimeout(r, POLL_INTERVAL_MS));
+      waited += POLL_INTERVAL_MS;
+    }
+    const finalDtlsState = senderAny.dtlsTransport?.state ?? "unknown";
+    if (finalDtlsState !== "connected") {
+      console.error("[outboundAudioTrack] DTLS still not connected after 3s — aborting playback", {
+        sessionId,
+        finalDtlsState,
+      });
+      pushMediaSessionEvent(sessionId, "outbound_rtc_dtls_timeout", { finalDtlsState });
+      return false;
+    }
+    console.log("[outboundAudioTrack] DTLS connected after polling", { sessionId, waited });
+  }
 
   return new Promise<boolean>((resolve) => {
     const sendNext = () => {
@@ -132,14 +178,30 @@ export async function scheduleOutboundAudio(
 
       const frame = frames[frameIndex];
 
-      // Build minimal RTP header — sender.sendRtp fills ssrc + payloadType
+      // Build RTP packet and feed it into the local werift MediaStreamTrack.
+      // That lets werift's normal sender pipeline stamp/send the packet instead
+      // of bypassing the track with sender.sendRtp(), which appears to negotiate
+      // successfully but can still yield silent playback in the browser.
       const header = new RtpHeader();
-      header.sequenceNumber = 0;     // overwritten by sender
+      header.sequenceNumber = frameIndex & 0xffff;
       header.timestamp = timestamp;
-      header.marker = frameIndex === 0; // set marker on first frame of sequence
+      header.marker = frameIndex === 0;
+      header.payloadType = codecInfo?.payloadType ?? 111;
+      if (typeof ssrcInfo === "number") {
+        header.ssrc = ssrcInfo;
+      }
 
       const packet = new RtpPacket(header, frame);
-      sender.sendRtp(packet).catch(() => {});
+
+      try {
+        if (localTrack?.writeRtp) {
+          localTrack.writeRtp(packet);
+        } else {
+          sender.sendRtp(packet).catch(() => {});
+        }
+      } catch {
+        sender.sendRtp(packet).catch(() => {});
+      }
 
       frameIndex++;
       timestamp = (timestamp + SAMPLES_PER_FRAME) >>> 0;
@@ -152,10 +214,21 @@ export async function scheduleOutboundAudio(
       state.cancelFn = undefined;
       cancelled = false;
 
+      // Bug 1 fix: re-open the server-side listening gate now that the AI has
+      // finished speaking over WebRTC. This is the authoritative signal for the
+      // WebRTC path (the 8s safety-net timeout in processingQueue.ts fires later
+      // as a backup for the HTTP-only path).
+      setSessionListening(sessionId, true);
+      console.log("[outboundAudioTrack] listening gate reopened (playback finished)", {
+        sessionId,
+        sentFrames: frameIndex,
+      });
+
       updateMediaSession(sessionId, { status: "connected" });
       pushMediaSessionEvent(sessionId, "outbound_rtc_ended", {
         sentFrames: frameIndex,
       });
+      pushMediaSessionEvent(sessionId, "listening_gate_reopened_rtc", { sentFrames: frameIndex });
       console.log("[outboundAudioTrack] playback finished", {
         sessionId,
         sentFrames: frameIndex,

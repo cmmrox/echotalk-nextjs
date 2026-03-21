@@ -1,6 +1,7 @@
 import { RTCPeerConnection, MediaStreamTrack } from "werift";
 
 import { attachInboundTrackObserver } from "@/media-service/inboundTrack";
+import { removeListeningState } from "@/media-service/listeningState";
 import { registerOutboundSender, removeOutboundSender } from "@/media-service/outboundAudioTrack";
 import { getMediaServiceStore } from "@/media-service/store";
 import {
@@ -116,15 +117,29 @@ export async function ensureMediaPeer(sessionId: string) {
   });
 
   pc.connectionStateChange.subscribe(() => {
+    const cs = pc.connectionState;
+    const ics = pc.iceConnectionState;
     console.log("[media-service/peer] connection state", {
       sessionId,
-      connectionState: pc.connectionState,
-      iceConnectionState: pc.iceConnectionState,
+      connectionState: cs,
+      iceConnectionState: ics,
     });
     pushMediaSessionEvent(sessionId, "connection_state_changed", {
-      connectionState: pc.connectionState,
-      iceConnectionState: pc.iceConnectionState,
+      connectionState: cs,
+      iceConnectionState: ics,
     });
+
+    // Stage 21: auto-cleanup when the peer disconnects or fails so we don't
+    // hold stale in-memory state forever.
+    if (cs === "closed" || cs === "failed" || cs === "disconnected") {
+      updateMediaSession(sessionId, { status: "stopped" });
+      // Re-open the listening gate in case it was left closed (AI was speaking).
+      removeListeningState(sessionId);
+      // Remove the peer from the registry — session row stays so the client can
+      // still read it and knows the session ended.
+      getMediaServiceStore().peers.delete(sessionId);
+      console.log("[media-service/peer] peer cleaned up after", cs, { sessionId });
+    }
   });
 
   const bundle: import("@/media-service/store").MediaPeerBundle = { pc };
@@ -182,6 +197,17 @@ export async function mediaAcceptOffer(params: {
   }
 
   const answer = await pc.createAnswer();
+
+  // Log SDP direction lines so we can confirm the outbound audio track is negotiated.
+  const sdpLines = (answer.sdp ?? "").split("\n");
+  const audioSection = sdpLines
+    .filter((l) =>
+      l.startsWith("m=") || l.includes("sendrecv") || l.includes("sendonly") ||
+      l.includes("recvonly") || l.startsWith("a=msid") || l.startsWith("a=ssrc")
+    )
+    .join(" | ");
+  console.log("[media-service/peer] answer SDP summary", { sessionId, audioSection });
+
   await pc.setLocalDescription(answer);
 
   // Gather candidates with a timeout — don't block indefinitely.
@@ -189,7 +215,8 @@ export async function mediaAcceptOffer(params: {
   // After 2.5 s we proceed with whatever is gathered.
   const GATHER_TIMEOUT_MS = 2500;
   await Promise.race([
-    pc.gatherCandidates(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (pc as any).gatherCandidates(),
     new Promise<void>((resolve) => setTimeout(resolve, GATHER_TIMEOUT_MS)),
   ]);
 

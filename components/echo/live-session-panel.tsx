@@ -154,9 +154,16 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   const fullSessionRef       = React.useRef<FullWebRtcClientSession | null>(null);
   const vadRef               = React.useRef<VadLoop | null>(null);
   const audioContextRef      = React.useRef<AudioContext | null>(null);
+  /** Dedicated playback context for the remote WebRTC stream — kept separate
+   *  from audioContextRef (VAD mic context) to prevent Chrome suppressing
+   *  output when both mic and remote stream share the same AudioContext. */
+  const playbackContextRef   = React.useRef<AudioContext | null>(null);
   const audioRef             = React.useRef<HTMLAudioElement | null>(null);
   const ttsAudioRef          = React.useRef<HTMLAudioElement | null>(null);
   const lastPlayedTurnRef    = React.useRef<number | null>(null);
+  const rtcFallbackTriedRef  = React.useRef<Set<number>>(new Set());
+  const rtcStartedTurnsRef   = React.useRef<Set<number>>(new Set());
+  const rtcRemoteLiveRef     = React.useRef<boolean>(false);
   const chatEndRef           = React.useRef<HTMLDivElement | null>(null);
   /** Track how many session events we have already scanned for RTC events */
   const lastEventCountRef    = React.useRef<number>(0);
@@ -214,6 +221,14 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
         for (const ev of newEvents as Array<{ type: string }>) {
           if (ev.type === "outbound_rtc_started") {
+            const startedTurn = Number(
+              (ev as { data?: { turnNumber?: number } }).data?.turnNumber ??
+              (t as TelemetrySnapshot | null)?.outboundAudio?.turnNumber ??
+              -1
+            );
+            if (startedTurn > 0 && rtcRemoteLiveRef.current) {
+              rtcStartedTurnsRef.current.add(startedTurn);
+            }
             vadRef.current?.mute();
             setVadMuted(true);
             setPhase("speaking");
@@ -272,17 +287,50 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     lastPlayedTurnRef.current = turnNumber;
 
     // ── WebRTC mode: audio is delivered via the remote MediaStream track. ──
-    // The browser plays it automatically through audioRef.srcObject.
-    // Turn-taking (VAD mute/unmute) is handled by outbound_rtc_started/ended
-    // events scanned in refreshSnapshot. Nothing to do here except mark seen.
+    // In practice this path is still flaky in some browsers/environments.
+    // So we give RTC a short head start, then automatically fall back to the
+    // stored HTTP audio once per turn if the user still isn't hearing anything.
     if (snap.outboundAudio.rtcMode) {
-      console.log("[live-session-panel] RTC audio delivery — remote stream handles playback", {
-        sessionId: client.id,
-        turnNumber,
-      });
-      // Mark HTTP endpoint as delivered so it doesn't accumulate stale state.
-      fetch(`/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1`)
-        .catch(() => {});
+      // Once the remote RTC track is alive for this session, trust it and do
+      // not trigger HTTP fallback at all — otherwise we can double-play the
+      // first reply while the browser is still attaching/unmuting the track.
+      if (rtcRemoteLiveRef.current) {
+        console.log("[live-session-panel] RTC remote track live; suppressing HTTP fallback", {
+          sessionId: client.id,
+          turnNumber,
+        });
+        return;
+      }
+
+      if (!rtcFallbackTriedRef.current.has(turnNumber)) {
+        rtcFallbackTriedRef.current.add(turnNumber);
+        console.log("[live-session-panel] RTC audio delivery detected; monitoring before fallback", {
+          sessionId: client.id,
+          turnNumber,
+        });
+        const fallbackDelayMs = 2800;
+        window.setTimeout(() => {
+          const latestTurn = fullSessionRef.current?.id === client.id
+            ? telemetry?.outboundAudio?.turnNumber ?? null
+            : null;
+          if (latestTurn !== turnNumber) return;
+
+          if (rtcRemoteLiveRef.current || rtcStartedTurnsRef.current.has(turnNumber)) {
+            console.log("[live-session-panel] RTC became live in time; skipping HTTP fallback", {
+              sessionId: client.id,
+              turnNumber,
+            });
+            return;
+          }
+
+          console.log("[live-session-panel] RTC still not live → fetching HTTP audio", {
+            sessionId: client.id,
+            turnNumber,
+          });
+          lastPlayedTurnRef.current = turnNumber - 1;
+          void playLatestOutboundAudio();
+        }, fallbackDelayMs);
+      }
       return;
     }
 
@@ -371,26 +419,145 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     setPhase("starting");
     setMessages([]);
     lastPlayedTurnRef.current = null;
+    rtcFallbackTriedRef.current.clear();
+    rtcStartedTurnsRef.current.clear();
+    rtcRemoteLiveRef.current = false;
     lastEventCountRef.current = 0;
 
     try {
+      // ── Create AudioContexts FIRST, inside user-gesture context. ──
+      // Two separate contexts: one for VAD (mic analysis), one for remote
+      // stream playback. Keeping them separate prevents Chrome from treating
+      // the remote audio as "echo" and suppressing it.
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const playbackContext = new AudioContext();
+      playbackContextRef.current = playbackContext;
+
       const fullClient = new FullWebRtcClientSession();
       fullSessionRef.current = fullClient;
 
       const session = await fullClient.connect();
       setSessionId(session.sessionId);
 
+      // ── Pipe remote WebRTC stream through AudioContext (not <audio> element). ──
       const remoteStream = fullClient.getRemoteStream();
-      if (audioRef.current && remoteStream) {
-        audioRef.current.srcObject = remoteStream;
-        audioRef.current.autoplay = true;
+
+      /** Report browser-side events back to the server log for diagnostics. */
+      const reportBrowserEvent = (type: string, data: Record<string, unknown> = {}) => {
+        fetch("/api/media-service/client-event", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: session.sessionId, type, ...data }),
+        }).catch(() => {});
+      };
+
+      reportBrowserEvent("start", {
+        vadContextState: audioContext.state,
+        playbackContextState: playbackContext.state,
+        hasRemoteStream: !!remoteStream,
+        remoteAudioTracks: remoteStream?.getAudioTracks().length ?? 0,
+      });
+
+      if (remoteStream) {
+        let audioSourceNode: MediaStreamAudioSourceNode | null = null;
+
+        const connectRemoteToAudioContext = (reason: string) => {
+          // Use the dedicated playback context (not the VAD/mic context).
+          const ctx = playbackContextRef.current;
+          if (!ctx) return;
+          if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+          const tracks = remoteStream.getAudioTracks();
+          reportBrowserEvent("connect-attempt", {
+            reason,
+            playbackCtxState: ctx.state,
+            audioTracks: tracks.length,
+            trackStates: tracks.map((t) => ({ id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState })),
+          });
+
+          if (tracks.length === 0) {
+            reportBrowserEvent("connect-skip", { reason: "no audio tracks yet" });
+            return;
+          }
+
+          // Attach mute/unmute watchers to each track (first time only).
+          tracks.forEach((t) => {
+            if (!(t as MediaStreamTrack & { _echoWatched?: boolean })._echoWatched) {
+              (t as MediaStreamTrack & { _echoWatched?: boolean })._echoWatched = true;
+              t.onunmute = () => {
+                rtcRemoteLiveRef.current = true;
+                const currentTurn = fullSessionRef.current
+                  ? (telemetry?.outboundAudio?.turnNumber ?? null)
+                  : null;
+                if (currentTurn) {
+                  rtcStartedTurnsRef.current.add(currentTurn);
+                }
+                reportBrowserEvent("track-unmuted", { kind: t.kind, id: t.id, currentTurn });
+                // Reconnect playback AudioContext with now-live track.
+                connectRemoteToAudioContext("unmute");
+              };
+              t.onmute = () => reportBrowserEvent("track-muted", { kind: t.kind });
+            }
+          });
+
+          // Disconnect old source if any before reconnecting
+          try { audioSourceNode?.disconnect(); } catch { /* ignore */ }
+
+          try {
+            audioSourceNode = ctx.createMediaStreamSource(remoteStream);
+            // GainNode at 1.0 ensures volume is never zeroed by the context graph.
+            const gain = ctx.createGain();
+            gain.gain.value = 1.0;
+            audioSourceNode.connect(gain);
+            gain.connect(ctx.destination);
+            reportBrowserEvent("connect-ok", { playbackCtxState: ctx.state });
+          } catch (err) {
+            reportBrowserEvent("connect-error", { error: String(err) });
+          }
+        };
+
+        // Connect now (may be empty, addtrack listener handles late arrivals).
+        connectRemoteToAudioContext("initial");
+
+        // Reconnect when server's audio track arrives via WebRTC ontrack.
+        remoteStream.addEventListener("addtrack", (ev) => {
+          const track = (ev as MediaStreamTrackEvent).track;
+          reportBrowserEvent("addtrack", { kind: track?.kind, id: track?.id, muted: track?.muted });
+          connectRemoteToAudioContext("addtrack");
+
+          // Watch for the track to unmute (= RTP packets arriving from server).
+          if (track) {
+            track.onunmute = () => {
+              rtcRemoteLiveRef.current = true;
+              const currentTurn = fullSessionRef.current
+                ? (telemetry?.outboundAudio?.turnNumber ?? null)
+                : null;
+              if (currentTurn) {
+                rtcStartedTurnsRef.current.add(currentTurn);
+              }
+              reportBrowserEvent("track-unmuted", { kind: track.kind, id: track.id, currentTurn });
+              connectRemoteToAudioContext("unmute");
+            };
+            track.onmute = () => {
+              reportBrowserEvent("track-muted", { kind: track.kind, id: track.id });
+            };
+          }
+        });
+
+        // Keep the hidden <audio> element detached for RTC playback.
+        // We use only the AudioContext graph as the single playback path to
+        // avoid double-playing the same remote stream through two outputs.
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.srcObject = null;
+          audioRef.current.muted = true;
+          reportBrowserEvent("audio-el-detached-for-rtc", {});
+        }
       }
 
       const localStream = fullClient.getLocalStream();
       if (!localStream) throw new Error("Local media stream not available");
-
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
 
       vadRef.current = new VadLoop(audioContext, localStream, {
         onVolumeChange: (level) => setMicLevel(level),
@@ -430,12 +597,17 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     lastEventCountRef.current = 0;
     await audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
+    await playbackContextRef.current?.close().catch(() => undefined);
+    playbackContextRef.current = null;
     await fullSessionRef.current?.stop();
     fullSessionRef.current = null;
     setSessionId("");
     setTelemetry(null);
     setPlayingTurn(null);
     lastPlayedTurnRef.current = null;
+    rtcFallbackTriedRef.current.clear();
+    rtcStartedTurnsRef.current.clear();
+    rtcRemoteLiveRef.current = false;
     if (audioRef.current) audioRef.current.srcObject = null;
     setPhase("idle");
   }
@@ -445,6 +617,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     return () => {
       vadRef.current?.stop();
       void audioContextRef.current?.close().catch(() => undefined);
+      void playbackContextRef.current?.close().catch(() => undefined);
       void fullSessionRef.current?.stop();
     };
   }, []);
@@ -516,9 +689,9 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
         </div>
       ) : null}
 
-      {/* ── Hidden audio elements ── */}
-      <audio ref={audioRef} hidden />
-      <audio ref={ttsAudioRef} hidden />
+      {/* ── Hidden audio elements (use CSS not the hidden attr — hidden blocks play()) ── */}
+      <audio ref={audioRef} style={{ display: "none" }} playsInline />
+      <audio ref={ttsAudioRef} style={{ display: "none" }} playsInline />
 
       {/* ── Debug section (collapsed) ── */}
       {isActive || messages.length > 0 ? (
