@@ -38,11 +38,46 @@ npm run dev
 Open http://localhost:3000
 
 ## Endpoints
-- `POST /api/stt` (multipart/form-data: `audio`)
-- `POST /api/agent` (JSON: `{ transcript, detectedLanguage? }`)
-- `POST /api/tts` (JSON: `{ text, languageCode? }`) → returns `audio/mpeg`
+
+### Push-to-talk (legacy / simple)
+- `POST /api/stt` — multipart `audio` → `{ transcript, detectedLanguage, confidence }`
+- `POST /api/agent` — `{ transcript, detectedLanguage? }` → `{ replyText, replyLanguage }`
+- `POST /api/tts` — `{ text, languageCode? }` → `audio/mpeg`
+
+### Live WebRTC conversation (media-service)
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/media-service/session` | Create a new media session → `{ sessionId }` |
+| `GET` | `/api/media-service/session?sessionId=…` | Poll session state + telemetry |
+| `DELETE` | `/api/media-service/session?sessionId=…` | End session and clean up peer |
+| `POST` | `/api/media-service/offer` | SDP offer → returns SDP answer |
+| `POST` | `/api/media-service/ice` | Trickle ICE candidate from browser |
+| `POST` | `/api/media-service/trigger-turn` | VAD speech-end → finalize current segment |
+| `POST` | `/api/media-service/set-listening?listening=0\|1` | Echo gate: pause/resume inbound processing |
+| `GET` | `/api/media-service/outbound/latest?sessionId=…` | Fetch latest TTS audio (HTTP fallback) |
+| `POST` | `/api/media-service/client-event` | Browser diagnostic events (logging only) |
+
+## Architecture
+
+```
+Browser mic  →  WebRTC (werift)  →  inboundTrack.ts
+                                       ↓ VAD / 300-packet window
+                                  segmentationBuffer.ts
+                                       ↓
+                                  processingQueue.ts
+                                   ↙         ↘
+                           Google STT      (empty → skip)
+                                ↓
+                           OpenAI agent (with conversation history)
+                                ↓
+                           Google TTS  →  outboundAudioTrack.ts
+                                              ↓ RTP via werift
+                                         Browser plays remote track
+                                         (HTTP fallback if DTLS not ready)
+```
 
 ## Troubleshooting
 - **Mic permission**: ensure your browser allows microphone access.
-- **Google auth**: verify `GOOGLE_APPLICATION_CREDENTIALS` points to a readable JSON file.
+- **Google auth**: verify `ECHOTALK_GOOGLE_APPLICATION_CREDENTIALS` points to a readable service-account JSON file.
 - **OpenAI**: verify `OPENAI_API_KEY` is set in `.env.local`.
+- **WebRTC**: for corporate/strict-NAT networks add TURN server URLs to `iceServers` in `media-service/peerManager.ts`.

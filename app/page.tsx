@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { LiveSessionPanel } from "@/components/echo/live-session-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -399,7 +400,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-xl">
         <CardHeader>
           <CardTitle>EchoTalk</CardTitle>
           <CardDescription>
@@ -407,68 +408,70 @@ export default function Home() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center gap-4">
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={onToggle}
-              disabled={state === "requesting_permission"}
-            >
-              {getButtonLabel(state)}
-            </Button>
+          <div className="flex flex-col gap-5">
 
-            <p className="text-center text-sm text-muted-foreground">
-              {getStatusLine(state, processingHint)}
-            </p>
-
-            {state === "listening" ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Recording: {recordSeconds}s / {MAX_RECORD_SECONDS}s
-              </p>
-            ) : null}
-
-            {lastRecordingInfo ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Last recording: {lastRecordingInfo.mimeType} •{" "}
-                {Math.max(1, Math.round(lastRecordingInfo.bytes / 1024))} KB
-              </p>
-            ) : null}
-
-            {transcript ? (
-              <div className="w-full rounded-md border bg-card p-3 text-sm">
-                <p className="text-xs text-muted-foreground">Transcript</p>
-                <p className="mt-1 whitespace-pre-wrap">{transcript}</p>
-                {detectedLanguage ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Detected language: {detectedLanguage}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {replyText ? (
-              <div className="w-full rounded-md border bg-card p-3 text-sm">
-                <p className="text-xs text-muted-foreground">Assistant</p>
-                <p className="mt-1 whitespace-pre-wrap">{replyText}</p>
-                {replyLanguage ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Reply language: {replyLanguage}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+            {/* ── Primary: Live WebRTC conversation ── */}
+            <LiveSessionPanel onError={setErrorMessage} />
 
             {errorMessage ? (
-              <p className="text-center text-sm text-destructive">
-                {errorMessage}
-              </p>
+              <p className="text-center text-sm text-destructive">{errorMessage}</p>
             ) : null}
 
-            {isBusy ? (
-              <p className="text-center text-xs text-muted-foreground">
-                (You can tap Stop at any time.)
+            {/* ── Divider ── */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 border-t" />
+              <span className="text-xs text-muted-foreground">or use push-to-talk</span>
+              <div className="flex-1 border-t" />
+            </div>
+
+            {/* ── Legacy: Push-to-talk ── */}
+            <div className="flex flex-col items-center gap-3">
+              <Button
+                size="lg"
+                className="w-full"
+                variant="outline"
+                onClick={onToggle}
+                disabled={state === "requesting_permission"}
+              >
+                {getButtonLabel(state)}
+              </Button>
+
+              <p className="text-center text-sm text-muted-foreground">
+                {getStatusLine(state, processingHint)}
               </p>
-            ) : null}
+
+              {state === "listening" ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  Recording: {recordSeconds}s / {MAX_RECORD_SECONDS}s
+                </p>
+              ) : null}
+
+              {transcript ? (
+                <div className="w-full rounded-md border bg-card p-3 text-sm">
+                  <p className="text-xs text-muted-foreground">You said</p>
+                  <p className="mt-1 whitespace-pre-wrap">{transcript}</p>
+                  {detectedLanguage ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {detectedLanguage}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {replyText ? (
+                <div className="w-full rounded-md border bg-card p-3 text-sm">
+                  <p className="text-xs text-muted-foreground">Assistant</p>
+                  <p className="mt-1 whitespace-pre-wrap">{replyText}</p>
+                </div>
+              ) : null}
+
+              {isBusy ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  (You can tap Stop at any time.)
+                </p>
+              ) : null}
+            </div>
+
           </div>
         </CardContent>
       </Card>

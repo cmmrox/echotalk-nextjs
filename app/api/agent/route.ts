@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { detectLanguageFromText } from "@/lib/languageDetect";
-import { LIMITS } from "@/lib/limits";
-import { getOpenAIClient, getOpenAIModel } from "@/lib/openai";
+import { generateAgentReply } from "@/lib/services/agent";
+import { getWebRtcSession } from "@/lib/webrtc/sessionRegistry";
 
 export const runtime = "nodejs";
 
 type AgentRequest = {
   transcript: string;
   detectedLanguage?: string;
+  sessionId?: string;
 };
 
 export async function POST(req: Request) {
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as AgentRequest | null;
     const transcript = body?.transcript?.trim() ?? "";
     const detectedLanguage = body?.detectedLanguage?.trim() ?? "";
-    const replyLanguage = detectLanguageFromText(transcript);
+    const sessionId = body?.sessionId?.trim() ?? "";
 
     if (!transcript) {
       return NextResponse.json(
@@ -25,47 +25,21 @@ export async function POST(req: Request) {
       );
     }
 
-    if (transcript.length > LIMITS.maxTranscriptChars) {
-      return NextResponse.json(
-        {
-          error: "bad_request",
-          message: `Transcript too long (max ${LIMITS.maxTranscriptChars} chars).`,
-        },
-        { status: 400 }
-      );
-    }
+    const session = sessionId ? getWebRtcSession(sessionId) : undefined;
+    const recentTurns =
+      session?.turns.map((turn) => ({
+        role: turn.role,
+        text: turn.text,
+        language: turn.language,
+      })) ?? [];
 
-    const client = getOpenAIClient();
-    const model = getOpenAIModel();
-
-    // `detectedLanguage` coming from STT may be unreliable (often falls back to primary).
-    // Prefer deterministic detection from transcript, and keep `detectedLanguage` only as a hint.
-    const languageHint = `Reply language: ${replyLanguage}.` +
-      (detectedLanguage ? ` (STT hint: ${detectedLanguage})` : "");
-
-    const response = await client.responses.create({
-      model,
-      input: [
-        {
-          role: "system",
-          content:
-            "You are EchoTalk, a voice assistant. Reply in the same language as the user's message. Keep it concise and natural.",
-        },
-        {
-          role: "user",
-          content: `${languageHint}\nUser said: ${transcript}`,
-        },
-      ],
-      // Keep MVP snappy/cheap.
-      max_output_tokens: 250,
+    const result = await generateAgentReply({
+      transcript,
+      detectedLanguage,
+      recentTurns,
     });
 
-    let replyText = (response.output_text ?? "").trim();
-    if (replyText.length > LIMITS.maxAgentReplyChars) {
-      replyText = replyText.slice(0, LIMITS.maxAgentReplyChars);
-    }
-
-    return NextResponse.json({ replyText, replyLanguage });
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
