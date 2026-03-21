@@ -1,6 +1,8 @@
 import { RTCPeerConnection, MediaStreamTrack } from "werift";
 import type { RTCRtpSender } from "werift";
 
+import type { ConversationState } from "@/media-service/conversationState";
+
 export type InboundTrackObserver = {
   kind: string;
   id: string;
@@ -16,6 +18,10 @@ export type MediaServiceSession = {
   id: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Legacy coarse session status kept for backwards compatibility with the
+   * current UI and route responses. New work should prefer conversationState.
+   */
   status:
     | "created"
     | "signaling"
@@ -24,6 +30,12 @@ export type MediaServiceSession = {
     | "speaking"
     | "stopped"
     | "error";
+  /**
+   * Authoritative fine-grained state for live conversation flow.
+   * Phase 1 introduces this alongside the legacy `status` field so the
+   * implementation can migrate incrementally without breaking the UI.
+   */
+  conversationState: ConversationState;
   events: Array<{
     type: string;
     at: string;
@@ -70,6 +82,23 @@ export type MediaServiceSession = {
     turnNumber: number;
     contentType: string;
     createdAt: string;
+  };
+  latestMetrics?: {
+    turnNumber: number;
+    startedAt?: string;
+    finalizedAt?: string;
+    sttStartedAt?: string;
+    sttCompletedAt?: string;
+    agentStartedAt?: string;
+    agentCompletedAt?: string;
+    ttsStartedAt?: string;
+    ttsCompletedAt?: string;
+    playbackStartedAt?: string;
+    playbackFinishedAt?: string;
+    finalizeReason?: string;
+    endpointReason?: string;
+    playbackMode?: "rtc" | "http";
+    durations?: Record<string, number | undefined>;
   };
   outboundAudio?: {
     ready: boolean;

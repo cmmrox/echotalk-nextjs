@@ -4,6 +4,7 @@ import { resetSegmentBuffer } from "@/media-service/segmentationBuffer";
 import { pushMediaSessionEvent } from "@/media-service/sessionManager";
 import { isSessionListening } from "@/media-service/listeningState";
 import { markSpeechStarted } from "@/media-service/speechStartTracker";
+import { handleSpeechStartHint } from "@/media-service/turnDetector";
 
 export const runtime = "nodejs";
 
@@ -26,13 +27,17 @@ export async function POST(req: Request) {
     );
   }
 
-  // Don't reset while AI is speaking — avoids race with playback gate.
+  // During assistant playback, treat speech-start as a barge-in signal instead
+  // of hard-rejecting it. Still avoid resetting the segment buffer here.
   if (!isSessionListening(sessionId)) {
-    return NextResponse.json({ reset: false, reason: "ai_speaking" });
+    markSpeechStarted(sessionId);
+    handleSpeechStartHint(sessionId);
+    return NextResponse.json({ reset: false, reason: "ai_speaking_interrupt_candidate" });
   }
 
   resetSegmentBuffer(sessionId);
   markSpeechStarted(sessionId);
+  handleSpeechStartHint(sessionId);
 
   console.log("[media-service/speech-start] buffer reset + speech flagged", { sessionId });
   pushMediaSessionEvent(sessionId, "speech_start_buffer_reset", {});

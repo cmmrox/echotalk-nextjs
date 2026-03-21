@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FullWebRtcClientSession } from "@/lib/webrtc/fullClientSession";
 import type { MicVAD } from "@ricky0123/vad-web";
 import { encodeWav } from "@/lib/audio/encodeWav";
+import type { TurnMetricRecord } from "@/media-service/metrics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +36,10 @@ type ChatMessage = {
 
 type TelemetrySnapshot = {
   hasInboundTrack: boolean;
+  conversationState?: string | null;
+  latestMetrics?: (TurnMetricRecord & {
+    durations?: Record<string, number | undefined>;
+  }) | null;
   inboundTrack?: {
     kind: string;
     receivedRtpPackets: number;
@@ -200,8 +205,24 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
       const snapshot = await client.fetchSnapshot();
       setSessionId(snapshot.sessionId ?? "");
 
-      const t = snapshot.telemetry ?? null;
-      setTelemetry(t as TelemetrySnapshot | null);
+      const t = (snapshot.telemetry ?? null) as Partial<TelemetrySnapshot> | null;
+      setTelemetry({
+        hasInboundTrack: Boolean(t?.hasInboundTrack),
+        latestMetrics: t?.latestMetrics ?? null,
+        inboundTrack: t?.inboundTrack ?? null,
+        segmentation: t?.segmentation ?? null,
+        processing: t?.processing ?? null,
+        latestResult: t?.latestResult ?? null,
+        outboundAudio: t?.outboundAudio ?? null,
+        turns: t?.turns ?? [],
+        events: t?.events ?? [],
+        eventCount: t?.eventCount ?? 0,
+        turnCount: t?.turnCount ?? 0,
+        conversationState:
+          (snapshot as { conversationState?: string | null }).conversationState ??
+          t?.conversationState ??
+          null,
+      });
 
       // Build messages from the server turn list.
       const serverTurns = (t as TelemetrySnapshot | null)?.turns ?? [];
@@ -318,8 +339,9 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
         });
         const fallbackDelayMs = 2800;
         window.setTimeout(() => {
+          const currentTelemetry = telemetry;
           const latestTurn = fullSessionRef.current?.id === client.id
-            ? telemetry?.outboundAudio?.turnNumber ?? null
+            ? currentTelemetry?.outboundAudio?.turnNumber ?? null
             : null;
           if (latestTurn !== turnNumber) return;
 
@@ -327,6 +349,15 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
             console.log("[live-session-panel] RTC became live in time; skipping HTTP fallback", {
               sessionId: client.id,
               turnNumber,
+            });
+            return;
+          }
+
+          if (lastPlayedTurnRef.current !== turnNumber) {
+            console.log("[live-session-panel] turn already advanced; skipping HTTP fallback", {
+              sessionId: client.id,
+              turnNumber,
+              lastPlayedTurn: lastPlayedTurnRef.current,
             });
             return;
           }
@@ -361,7 +392,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
     try {
       const res = await fetch(
-        `/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1`
+        `/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1&turnNumber=${turnNumber}`
       );
       if (!res.ok) { onPlaybackDone(); return; }
 

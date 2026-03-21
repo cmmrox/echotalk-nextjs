@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { queueTurnIfReady } from "@/media-service/processingQueue";
-import { finalizeSegmentIfPending } from "@/media-service/segmentationBuffer";
-import { appendTurnAudio } from "@/media-service/turnAudioStore";
-import { markTurnReady } from "@/media-service/turnState";
 import {
-  pushMediaSessionEvent,
-  updateMediaSession,
-} from "@/media-service/sessionManager";
-import { isSessionListening } from "@/media-service/listeningState";
-import { clearSpeechStart } from "@/media-service/speechStartTracker";
+  finalizeTurnIfReady,
+  handleSpeechStopHint,
+} from "@/media-service/turnDetector";
+import { pushMediaSessionEvent } from "@/media-service/sessionManager";
 
 export const runtime = "nodejs";
 
@@ -31,55 +26,43 @@ export async function POST(req: Request) {
     );
   }
 
-  // Block turn processing while the AI is speaking (echo prevention).
-  if (!isSessionListening(sessionId)) {
-    console.log("[media-service/trigger-turn] blocked — AI speaking", { sessionId });
-    return NextResponse.json({ triggered: false, reason: "ai_speaking" });
-  }
+  handleSpeechStopHint(sessionId);
 
-  const finalized = finalizeSegmentIfPending(sessionId);
-  if (!finalized) {
-    console.log("[media-service/trigger-turn] no pending audio", { sessionId });
-    return NextResponse.json({ triggered: false, reason: "no_pending_audio" });
+  const finalizedTurn = finalizeTurnIfReady({
+    sessionId,
+    reason: "vad_trigger",
+  });
+
+  if (!finalizedTurn.ok) {
+    console.log("[media-service/trigger-turn] skipped", {
+      sessionId,
+      reason: finalizedTurn.reason,
+      endpointDecision: finalizedTurn.endpointDecision,
+    });
+    return NextResponse.json({
+      triggered: false,
+      reason: finalizedTurn.reason,
+      endpointDecision: finalizedTurn.endpointDecision,
+    });
   }
 
   console.log("[media-service/trigger-turn] VAD-triggered finalize", {
     sessionId,
-    packetCount: finalized.packetCount,
-    frameCount: finalized.frames.length,
-    completedTurns: finalized.completedTurns,
-  });
-
-  appendTurnAudio(sessionId, {
-    turnNumber: finalized.completedTurns,
-    mimeType: "audio/ogg; codecs=opus",
-    frames: finalized.frames,
-  });
-
-  const turnWindow = markTurnReady(sessionId, {
-    packetCount: finalized.packetCount,
-    totalBytes: finalized.totalBytes,
-    completedTurns: finalized.completedTurns,
-  });
-
-  const processing = queueTurnIfReady(sessionId);
-  // Reset speech-start flag so the next 300-packet window requires a new signal.
-  clearSpeechStart(sessionId);
-
-  updateMediaSession(sessionId, {
-    turnWindow: { ...turnWindow },
-    processing: { ...processing },
+    packetCount: finalizedTurn.finalized.packetCount,
+    frameCount: finalizedTurn.finalized.frames.length,
+    completedTurns: finalizedTurn.finalized.completedTurns,
+    endpointDecision: finalizedTurn.endpointDecision,
   });
 
   pushMediaSessionEvent(sessionId, "vad_triggered_turn", {
-    packetCount: finalized.packetCount,
-    frameCount: finalized.frames.length,
+    packetCount: finalizedTurn.finalized.packetCount,
+    frameCount: finalizedTurn.finalized.frames.length,
   });
 
   return NextResponse.json({
     triggered: true,
-    turnNumber: finalized.completedTurns,
-    packetCount: finalized.packetCount,
-    frameCount: finalized.frames.length,
+    turnNumber: finalizedTurn.finalized.completedTurns,
+    packetCount: finalizedTurn.finalized.packetCount,
+    frameCount: finalizedTurn.finalized.frames.length,
   });
 }

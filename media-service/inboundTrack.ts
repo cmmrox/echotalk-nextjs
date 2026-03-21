@@ -1,16 +1,15 @@
-import { queueTurnIfReady } from "@/media-service/processingQueue";
-import { appendSegmentPacket, finalizeSegmentIfPending, snapshotSegment } from "@/media-service/segmentationBuffer";
 import {
-  appendTurnAudio,
-} from "@/media-service/turnAudioStore";
-import { markTurnReady, updateTurnWindow } from "@/media-service/turnState";
+  finalizeTurnIfReady,
+  handleProgressSnapshot,
+  handleInboundPacket,
+  shouldFinalizeOnTimeWindow,
+  skipNoSpeechWindow,
+} from "@/media-service/turnDetector";
 import type { InboundTrackObserver } from "@/media-service/store";
 import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
-import { isSessionListening } from "@/media-service/listeningState";
-import { clearSpeechStart, hadSpeechStart } from "@/media-service/speechStartTracker";
 
 export function attachInboundTrackObserver(params: {
   sessionId: string;
@@ -62,7 +61,7 @@ export function attachInboundTrackObserver(params: {
       observer.receivedRtpPackets += 1;
       observer.receivedBytes += payloadBytes;
       observer.lastPacketAt = new Date().toISOString();
-      appendSegmentPacket(sessionId, payloadBytes, payload);
+      handleInboundPacket(sessionId, { bytes: payloadBytes, payload });
 
       if (observer.receivedRtpPackets === 1) {
         console.log("[media-service/inboundTrack] first RTP packet", {
@@ -78,18 +77,13 @@ export function attachInboundTrackObserver(params: {
       }
 
       if (observer.receivedRtpPackets % 100 === 0) {
-        const segment = snapshotSegment(sessionId);
+        const { segment, turnWindow, speechSignal } = handleProgressSnapshot(sessionId);
         console.log("[media-service/inboundTrack] RTP progress", {
           sessionId,
           packets: observer.receivedRtpPackets,
           bytes: observer.receivedBytes,
           segment,
-        });
-        const turnWindow = updateTurnWindow(sessionId, {
-          ready: false,
-          packetCount: segment.packetCount,
-          totalBytes: segment.totalBytes,
-          completedTurns: segment.completedTurns,
+          speechSignal,
         });
         updateMediaSession(sessionId, {
           inboundTrack: { ...observer },
@@ -100,94 +94,55 @@ export function attachInboundTrackObserver(params: {
           packets: observer.receivedRtpPackets,
           bytes: observer.receivedBytes,
           segment,
+          speechSignal,
         });
       }
 
       if (observer.receivedRtpPackets % 300 === 0) {
-        // Gate: only process the 300-packet window if the browser VAD signalled
-        // speech-start since the last turn. Without that signal the buffer
-        // contains only background noise — skip and discard it entirely.
-        if (!hadSpeechStart(sessionId)) {
+        if (!shouldFinalizeOnTimeWindow(sessionId)) {
           console.log("[media-service/inboundTrack] 300-packet window skipped (no speech detected)", {
             sessionId,
             packets: observer.receivedRtpPackets,
           });
-          pushMediaSessionEvent(sessionId, "segment_window_skipped_no_speech", {
-            packets: observer.receivedRtpPackets,
-          });
-          // Discard the accumulated noise frames so they don't bleed into next turn.
-          finalizeSegmentIfPending(sessionId);
+          skipNoSpeechWindow(sessionId, observer.receivedRtpPackets);
           return;
         }
 
-        // Bug 2 fix: use finalizeSegmentIfPending so that if VAD already
-        // processed and cleared the buffer (< 20 frames remaining), this
-        // time-window tick is a harmless no-op instead of re-processing an
-        // almost-empty tail segment.
-        const finalized = finalizeSegmentIfPending(sessionId);
-        if (!finalized) {
-          console.log("[media-service/inboundTrack] 300-packet window skipped (VAD already cleared)", {
+        const finalizedTurn = finalizeTurnIfReady({
+          sessionId,
+          reason: "time_window",
+        });
+
+        if (!finalizedTurn.ok) {
+          console.log("[media-service/inboundTrack] 300-packet window skipped", {
             sessionId,
             packets: observer.receivedRtpPackets,
+            reason: finalizedTurn.reason,
+            endpointDecision: finalizedTurn.endpointDecision,
           });
-          pushMediaSessionEvent(sessionId, "segment_window_skipped_vad_cleared", {
+          pushMediaSessionEvent(sessionId, "segment_window_skipped", {
             packets: observer.receivedRtpPackets,
-          });
-          return;
-        }
-
-        const turnNumber = finalized.completedTurns;
-
-        // Skip processing if the AI is currently speaking — discard this window
-        // so we don't accidentally transcribe the AI's own voice from the mic.
-        if (!isSessionListening(sessionId)) {
-          console.log("[media-service/inboundTrack] segment discarded (AI speaking)", {
-            sessionId,
-            frameCount: finalized.frames.length,
-          });
-          pushMediaSessionEvent(sessionId, "segment_discarded_ai_speaking", {
-            frameCount: finalized.frames.length,
+            reason: finalizedTurn.reason,
+            endpointDecision: finalizedTurn.endpointDecision,
           });
           return;
         }
 
         console.log("[media-service/inboundTrack] segment window completed", {
           sessionId,
-          turnNumber,
-          packetCount: finalized.packetCount,
-          totalBytes: finalized.totalBytes,
-          frameCount: finalized.frames.length,
-          completedTurns: finalized.completedTurns,
+          turnNumber: finalizedTurn.finalized.completedTurns,
+          packetCount: finalizedTurn.finalized.packetCount,
+          totalBytes: finalizedTurn.finalized.totalBytes,
+          frameCount: finalizedTurn.finalized.frames.length,
+          completedTurns: finalizedTurn.finalized.completedTurns,
+          endpointDecision: finalizedTurn.endpointDecision,
         });
 
-        // Store the individual raw Opus frames from this turn window.
-        // Each frame is one RTP payload (one Opus packet, ~20ms of audio).
-        // The OGG Opus container builder in audioPackaging.ts uses these frames.
-        const storedAudio = appendTurnAudio(sessionId, {
-          turnNumber,
-          mimeType: "audio/ogg; codecs=opus",
-          frames: finalized.frames,
-        });
-
-        const turnWindow = markTurnReady(sessionId, {
-          packetCount: finalized.packetCount,
-          totalBytes: finalized.totalBytes,
-          completedTurns: finalized.completedTurns,
-        });
-        const processing = queueTurnIfReady(sessionId);
-        // Reset speech-start flag — next 300-packet window needs a fresh signal.
-        clearSpeechStart(sessionId);
         updateMediaSession(sessionId, {
           inboundTrack: { ...observer },
-          segmentation: finalized,
-          turnWindow: { ...turnWindow },
-          processing: { ...processing },
-        });
-        pushMediaSessionEvent(sessionId, "segment_window_completed", finalized);
-        pushMediaSessionEvent(sessionId, "turn_window_ready", turnWindow);
-        pushMediaSessionEvent(sessionId, "turn_audio_stored", {
-          turnNumber: storedAudio.turnNumber,
-          mimeType: storedAudio.mimeType,
+          segmentation: finalizedTurn.finalized,
+          turnWindow: { ...finalizedTurn.turnWindow },
+          processing: { ...finalizedTurn.processing },
         });
       }
     });

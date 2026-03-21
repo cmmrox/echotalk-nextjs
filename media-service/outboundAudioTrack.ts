@@ -13,8 +13,11 @@
 import { RtpPacket, RtpHeader } from "werift";
 import type { RTCRtpSender } from "werift";
 
+import { getInterruptionState } from "@/media-service/interruptions";
+import { markTurnMetric } from "@/media-service/metrics";
 import {
   pushMediaSessionEvent,
+  setConversationState,
   updateMediaSession,
 } from "@/media-service/sessionManager";
 import { setSessionListening } from "@/media-service/listeningState";
@@ -108,11 +111,19 @@ export async function scheduleOutboundAudio(
 
   // Mark session as speaking
   updateMediaSession(sessionId, { status: "speaking" });
+  const turnNumber = getMediaServiceStore().sessions.get(sessionId)?.outboundAudio?.turnNumber ?? null;
+
   pushMediaSessionEvent(sessionId, "outbound_rtc_started", {
-    turnNumber: (getMediaServiceStore().sessions.get(sessionId)?.outboundAudio?.turnNumber ?? null),
+    turnNumber,
     frameCount: frames.length,
     durationSeconds: (frames.length * FRAME_DURATION_MS / 1000).toFixed(2),
   });
+  if (typeof turnNumber === "number") {
+    markTurnMetric(sessionId, turnNumber, {
+      playbackStartedAt: new Date().toISOString(),
+      playbackMode: "rtc",
+    });
+  }
 
   console.log("[outboundAudioTrack] starting playback", {
     sessionId,
@@ -166,6 +177,30 @@ export async function scheduleOutboundAudio(
 
   return new Promise<boolean>((resolve) => {
     const sendNext = () => {
+      const interruption = getInterruptionState(sessionId);
+      if (interruption.active) {
+        cancelled = true;
+        pushMediaSessionEvent(sessionId, "outbound_rtc_interrupted", {
+          frameIndex,
+          interruption,
+        });
+        setConversationState(sessionId, "recovering", {
+          source: "outbound_audio",
+          frameIndex,
+          interruption,
+        });
+      } else if (interruption.candidate) {
+        pushMediaSessionEvent(sessionId, "outbound_rtc_interruption_candidate", {
+          frameIndex,
+          interruption,
+        });
+        setConversationState(sessionId, "interruption_candidate", {
+          source: "outbound_audio",
+          frameIndex,
+          interruption,
+        });
+      }
+
       if (cancelled) {
         finish();
         return;
@@ -225,7 +260,14 @@ export async function scheduleOutboundAudio(
       });
 
       updateMediaSession(sessionId, { status: "connected" });
+      if (typeof turnNumber === "number") {
+        markTurnMetric(sessionId, turnNumber, {
+          playbackFinishedAt: new Date().toISOString(),
+          playbackMode: "rtc",
+        });
+      }
       pushMediaSessionEvent(sessionId, "outbound_rtc_ended", {
+        turnNumber,
         sentFrames: frameIndex,
       });
       pushMediaSessionEvent(sessionId, "listening_gate_reopened_rtc", { sentFrames: frameIndex });

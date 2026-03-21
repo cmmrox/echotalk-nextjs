@@ -23,7 +23,15 @@ export const runtime = "nodejs";
  * Content-Type: audio/wav
  * Body: raw WAV bytes (16 kHz mono PCM from Silero VAD)
  *
- * Full pipeline: WAV → Google STT → OpenAI Agent → Google TTS → WebRTC push
+ * FALLBACK / DEBUG TURN PATH.
+ *
+ * Phase 1 architecture lock: the primary live path is the continuous media
+ * service session with server-owned turn processing. This route is kept only as
+ * a compatibility/debug path while the live stack is refactored incrementally.
+ *
+ * Full pipeline here remains:
+ * WAV → Google STT → OpenAI Agent → Google TTS → WebRTC push
+ *
  * Returns immediately with transcript + reply so the UI updates fast.
  * TTS audio is scheduled asynchronously over WebRTC.
  */
@@ -54,13 +62,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: true, reason: "audio_too_short" });
   }
 
-  console.log("[speech-turn] received audio", {
+  console.log("[speech-turn] received audio (fallback/debug path)", {
     sessionId,
     bytes: wavBuffer.length,
     durationEstimateMs: Math.round((wavBuffer.length - 44) / 2 / 16000 * 1000),
   });
 
-  pushMediaSessionEvent(sessionId, "speech_turn_received", { bytes: wavBuffer.length });
+  pushMediaSessionEvent(sessionId, "speech_turn_received", {
+    bytes: wavBuffer.length,
+    routeMode: "fallback_debug",
+  });
   updateMediaSession(sessionId, { status: "processing" });
 
   // ── 1. Speech-to-Text ──────────────────────────────────────────────────────

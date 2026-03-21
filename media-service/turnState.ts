@@ -1,4 +1,4 @@
-type TurnWindow = {
+export type TurnWindow = {
   ready: boolean;
   packetCount: number;
   totalBytes: number;
@@ -67,5 +67,23 @@ export function clearTurnReady(sessionId: string) {
     ready: false,
     packetCount: 0,
     totalBytes: 0,
+  });
+}
+
+/**
+ * Queue-oriented handoff for deferred processing.
+ * Phase 2 uses this to preserve detector-owned turn metadata even when the
+ * processing worker is already busy.
+ */
+export function markTurnPending(sessionId: string, params: {
+  packetCount: number;
+  totalBytes: number;
+  completedTurns: number;
+}) {
+  return updateTurnWindow(sessionId, {
+    ready: false,
+    packetCount: params.packetCount,
+    totalBytes: params.totalBytes,
+    completedTurns: params.completedTurns,
   });
 }

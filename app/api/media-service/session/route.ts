@@ -22,6 +22,7 @@ export async function POST() {
   return NextResponse.json({
     sessionId: session.id,
     status: "signaling",
+    conversationState: "connecting",
     createdAt: session.createdAt,
   });
 }
@@ -49,12 +50,14 @@ export async function GET(req: Request) {
     ...session,
     telemetry: {
       hasInboundTrack: Boolean(session.inboundTrack),
+      conversationState: session.conversationState,
       inboundTrack: session.inboundTrack ?? null,
       segmentation: session.segmentation ?? null,
       turnWindow: session.turnWindow ?? null,
       processing: session.processing ?? null,
       latestResult: session.latestResult ?? null,
       latestTts: session.latestTts ?? null,
+      latestMetrics: session.latestMetrics ?? null,
       outboundAudio: session.outboundAudio ?? null,
       eventCount: session.events.length,
       turnCount: session.turns.length,

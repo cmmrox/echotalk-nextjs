@@ -12,6 +12,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId")?.trim() ?? "";
   const markDelivered = searchParams.get("markDelivered") === "1";
+  const expectedTurnNumber = Number(searchParams.get("turnNumber"));
 
   if (!sessionId) {
     return NextResponse.json(
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
   console.log("[media-service/outbound/latest] request", {
     sessionId,
     markDelivered,
+    expectedTurnNumber: Number.isFinite(expectedTurnNumber) ? expectedTurnNumber : null,
     hasDelivery: Boolean(delivery),
     hasLatestTts: Boolean(latestTts),
   });
@@ -38,7 +40,10 @@ export async function GET(req: Request) {
   }
 
   if (markDelivered) {
-    markOutboundDelivered(sessionId);
+    markOutboundDelivered(
+      sessionId,
+      Number.isFinite(expectedTurnNumber) ? expectedTurnNumber : undefined
+    );
   }
 
   return new Response(Buffer.from(latestTts.audioBase64, "base64"), {

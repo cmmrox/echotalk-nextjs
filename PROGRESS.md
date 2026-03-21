@@ -155,6 +155,81 @@
 - STT skipped when fewer than 30 voice frames (< 0.6s speech)
 - Plan: impl-plans/plan-11-full-webrtc-media-service.md
 
+## Stage 35 — Stability refactor Phase 1: architecture lock + conversation state foundation
+✅ Done
+- Plan: impl-plans/plan-12-google-stt-openai-google-tts-stability-refactor.md
+- Added `media-service/conversationState.ts` for fine-grained live session state
+- Extended session store with `conversationState` while preserving legacy `status`
+- Session updates now sync legacy status ↔ conversation state automatically
+- `speech-turn` route explicitly marked as fallback/debug path during refactor
+- Live session telemetry now carries conversationState for incremental UI migration
+
+## Stage 36 — Stability refactor Phase 2: server-owned turn detector foundation
+✅ Done
+- Added `media-service/turnDetector.ts` as the new server-owned turn coordination layer
+- Inbound RTP path now feeds turn detector helpers instead of owning finalize logic directly
+- `trigger-turn` route now finalizes through turn detector instead of duplicating turn storage/queueing logic
+- Speech signal tracking expanded to include stop hints and timestamps
+- Segmentation buffer gained explicit segment-start hook for turn-detector integration
+- Progress snapshots now include speech-signal state for centralized detector debugging
+- Turn detector now exposes structured snapshot/finalize result types for the next refactor pass
+- Deferred turn handling now preserves detector-owned turn metadata while processing is busy
+- Added Phase 3 hook points for short-utterance threshold tuning inside the detector
+
+## Stage 37 — Stability refactor Phase 3: endpointing + short utterance protection
+✅ Done
+- Added `media-service/endpointingHeuristics.ts` for detector-side endpoint decisions
+- Detector now considers silence timing before finalizing turns
+- Added strong short-utterance finalize path for brief user speech
+- Trigger-turn and time-window skip events now include endpoint decision metadata
+- Added natural-pause extension logic so longer utterances get extra silence budget before finalize
+- Detector thresholds now separate short-utterance vs natural-pause behavior
+- Added signal-strength gating using average bytes-per-packet to better reject weak/noisy short segments
+- Added explicit `turn_endpoint_deferred` telemetry for tuning deferred finalize cases
+- Added `turn_detector_progress` telemetry and average-bytes-per-packet visibility in finalize/defer paths
+- Detector endpointing path is now ready for real voice testing/tuning
+
+## Stage 38 — Stability refactor Phase 4: processing pipeline cleanup
+✅ Done
+- Added `media-service/pipeline.ts` to hold the primary finalized-turn processing path
+- Moved STT → agent → TTS orchestration out of `processingQueue.ts` into a dedicated pipeline module
+- `processingQueue.ts` now focuses on queueing, concurrency, and outcome handling instead of mixed audio/AI logic
+- Pipeline now returns authoritative outbound-audio metadata so queue/state updates stop reconstructing it separately
+- Pipeline outcomes now explicitly distinguish usable-speech vs skipped/no-speech cases for cleaner session/result handling
+- Queue completion now uses pipeline-owned latest-result shaping instead of rebuilding that object inline
+- Queue completion now uses a pipeline-owned session patch contract for latest result/TTS/outbound state
+
+## Stage 39 — Stability refactor Phase 5: interruption / barge-in handling
+✅ Done
+- Added `media-service/interruptions.ts` to track interruption candidate/active state per session
+- Speech-start during assistant playback now creates an explicit interruption candidate instead of looking like normal speech
+- Speech-stop after interruption candidate now commits interruption state and emits dedicated events
+- Outbound WebRTC playback now watches interruption state and stops early when user barge-in is detected
+- Listening resume now resolves interruption state explicitly instead of silently clearing it
+- Interruption-driven playback stop now differentiates candidate vs committed interruption in conversation state transitions
+- `speech-start` route now preserves barge-in intent during assistant playback instead of hard-rejecting it
+- Added candidate-age gating to reduce false interruption commits from ultra-short accidental triggers
+- Added interruption telemetry helpers so candidate/active age is visible during commit/reject decisions
+
+## Stage 40 — Stability refactor Phase 6: playback stabilization
+✅ Done
+- Outbound delivery state now records intended playback mode (`rtc` vs `http`)
+- Pipeline now decides playback mode before closing the listening gate, instead of treating delivery prep as mode-agnostic
+- Playback/listening events now carry playback mode metadata for easier diagnosis of WebRTC vs fallback behavior
+- HTTP delivery marking now includes expected turn number to reduce stale/double delivery marking during polling fallback
+- Pipeline now clears prior outbound delivery state before publishing a new TTS turn
+- Client RTC→HTTP fallback now avoids replay when turn bookkeeping has already advanced
+
+## Stage 41 — Stability refactor Phase 7: telemetry + test matrix
+✅ Done
+- Added `media-service/metrics.ts` for per-turn timing metrics and latest metric snapshot publishing
+- Detector and pipeline now stamp per-turn timing markers across finalize/STT/agent/TTS stages
+- Session store now exposes `latestMetrics` for diagnostics
+- Session API and client telemetry types now include `latestMetrics`
+- RTC playback now stamps playback start/finish timing into per-turn metrics
+- Added `impl-logs/test-matrix-voice-stability.md` with manual validation criteria for short speech, long speech, interruption, and playback reliability
+- Telemetry typing has been tightened so client/session diagnostics can consume shared metric shapes more safely
+
 ---
 
 ## Known Issues

@@ -25,6 +25,9 @@ function getStore() {
   return globalThis.__echotalkListeningState;
 }
 
+import { clearInterruption, resolveInterruption } from "@/media-service/interruptions";
+import { pushMediaSessionEvent, setConversationState } from "@/media-service/sessionManager";
+
 /** Returns true (listening) by default — unknown sessions are assumed to be listening. */
 export function isSessionListening(sessionId: string): boolean {
   return getStore().bySession.get(sessionId) !== false;
@@ -32,6 +35,21 @@ export function isSessionListening(sessionId: string): boolean {
 
 export function setSessionListening(sessionId: string, listening: boolean) {
   getStore().bySession.set(sessionId, listening);
+  if (listening) {
+    const resolved = resolveInterruption(sessionId, "listening_resumed");
+    if (resolved.previous.active || resolved.previous.candidate) {
+      pushMediaSessionEvent(sessionId, "interruption_resolved", {
+        source: "listening_state",
+        previous: resolved.previous,
+      });
+    }
+  } else {
+    clearInterruption(sessionId);
+  }
+  setConversationState(sessionId, listening ? "listening" : "assistant_speaking", {
+    source: "listening_state",
+    listening,
+  });
 }
 
 export function removeListeningState(sessionId: string) {

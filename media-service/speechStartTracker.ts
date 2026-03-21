@@ -8,9 +8,15 @@
  * skipped entirely.
  */
 
+type SpeechSignalState = {
+  started: boolean;
+  lastStartedAt?: string;
+  lastStoppedAt?: string;
+};
+
 declare global {
   var __echotalkSpeechStartTracker:
-    | { bySession: Map<string, boolean> }
+    | { bySession: Map<string, SpeechSignalState> }
     | undefined;
 }
 
@@ -21,19 +27,40 @@ function getStore() {
   return globalThis.__echotalkSpeechStartTracker;
 }
 
+function getState(sessionId: string): SpeechSignalState {
+  const existing = getStore().bySession.get(sessionId);
+  if (existing) return existing;
+
+  const created: SpeechSignalState = { started: false };
+  getStore().bySession.set(sessionId, created);
+  return created;
+}
+
 /** Called when the browser VAD fires onSpeechStart. */
 export function markSpeechStarted(sessionId: string) {
-  getStore().bySession.set(sessionId, true);
+  const state = getState(sessionId);
+  state.started = true;
+  state.lastStartedAt = new Date().toISOString();
+}
+
+export function markSpeechStopped(sessionId: string) {
+  const state = getState(sessionId);
+  state.lastStoppedAt = new Date().toISOString();
 }
 
 /** Returns true if speech-start was received since the last clearSpeechStart. */
 export function hadSpeechStart(sessionId: string): boolean {
-  return getStore().bySession.get(sessionId) === true;
+  return getState(sessionId).started === true;
+}
+
+export function getSpeechSignalState(sessionId: string) {
+  return { ...getState(sessionId) };
 }
 
 /** Called after a turn is processed to reset the flag for the next window. */
 export function clearSpeechStart(sessionId: string) {
-  getStore().bySession.set(sessionId, false);
+  const state = getState(sessionId);
+  state.started = false;
 }
 
 export function removeSpeechStart(sessionId: string) {

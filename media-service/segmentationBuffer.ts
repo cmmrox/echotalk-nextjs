@@ -4,7 +4,7 @@ type BufferedPacket = {
   payload?: Buffer;
 };
 
-type SegmentationState = {
+export type SegmentationState = {
   packets: BufferedPacket[];
   startedAt?: string;
   lastPacketAt?: string;
@@ -71,6 +71,19 @@ export function snapshotSegment(sessionId: string) {
     lastPacketAt: state.lastPacketAt,
     completedTurns: state.completedTurns,
   };
+}
+
+/**
+ * Explicitly mark the start of a new speech segment without discarding current
+ * packet history. Phase 2 uses this as the first server-owned turn-detector
+ * hook while the rolling buffer is still evolving.
+ */
+export function markSegmentStart(sessionId: string) {
+  const state = getSegmentationState(sessionId);
+  if (!state.startedAt) {
+    state.startedAt = new Date().toISOString();
+  }
+  return state;
 }
 
 /**

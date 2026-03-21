@@ -1,5 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 
+import {
+  DEFAULT_CONVERSATION_STATE,
+  deriveConversationStateFromLegacyStatus,
+  deriveLegacyStatusFromConversationState,
+  type ConversationState,
+} from "@/media-service/conversationState";
 import { getMediaServiceStore } from "@/media-service/store";
 import type { MediaServiceSession } from "@/media-service/store";
 
@@ -18,6 +24,7 @@ export function createMediaSession(): MediaServiceSession {
     createdAt: now,
     updatedAt: now,
     status: "created",
+    conversationState: DEFAULT_CONVERSATION_STATE,
     events: [],
     turns: [],
   };
@@ -36,8 +43,40 @@ export function updateMediaSession(
 ): MediaServiceSession | undefined {
   const session = getMediaServiceStore().sessions.get(sessionId);
   if (!session) return undefined;
-  Object.assign(session, patch, { updatedAt: new Date().toISOString() });
+
+  const merged: Partial<MediaServiceSession> = { ...patch };
+
+  if (merged.conversationState && !merged.status) {
+    merged.status = deriveLegacyStatusFromConversationState(
+      merged.conversationState
+    );
+  }
+
+  if (merged.status && !merged.conversationState) {
+    merged.conversationState = deriveConversationStateFromLegacyStatus(
+      merged.status
+    );
+  }
+
+  Object.assign(session, merged, { updatedAt: new Date().toISOString() });
   return session;
+}
+
+export function setConversationState(
+  sessionId: string,
+  conversationState: ConversationState,
+  data?: Record<string, unknown>
+): MediaServiceSession | undefined {
+  const updated = updateMediaSession(sessionId, { conversationState });
+  if (!updated) return undefined;
+
+  pushMediaSessionEvent(sessionId, "conversation_state_changed", {
+    conversationState,
+    legacyStatus: updated.status,
+    ...(data ?? {}),
+  });
+
+  return updated;
 }
 
 export function pushMediaSessionEvent(
