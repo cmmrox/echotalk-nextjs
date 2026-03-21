@@ -19,6 +19,7 @@ type SessionPhase =
   | "starting"
   | "connected"
   | "capturing"   // user is speaking
+  | "pausing"     // user paused — waiting 2.5s before finalising turn
   | "processing"  // waiting for STT / agent / TTS
   | "speaking"    // AI audio playing
   | "error";
@@ -108,13 +109,14 @@ function MicLevelBar({
 
 function PhaseLabel({ phase }: { phase: SessionPhase }) {
   const map: Record<SessionPhase, { label: string; color: string }> = {
-    idle:       { label: "Idle",        color: "text-muted-foreground" },
-    starting:   { label: "Connecting…", color: "text-yellow-600 dark:text-yellow-400" },
-    connected:  { label: "Listening",   color: "text-green-600 dark:text-green-400" },
-    capturing:  { label: "🎙 Speaking…", color: "text-blue-600 dark:text-blue-400" },
-    processing: { label: "⏳ Thinking…", color: "text-orange-500" },
-    speaking:   { label: "🔊 Speaking…", color: "text-purple-600 dark:text-purple-400" },
-    error:      { label: "Error",       color: "text-destructive" },
+    idle:       { label: "Idle",                    color: "text-muted-foreground" },
+    starting:   { label: "Connecting…",             color: "text-yellow-600 dark:text-yellow-400" },
+    connected:  { label: "Listening",               color: "text-green-600 dark:text-green-400" },
+    capturing:  { label: "🎙 Speaking…",            color: "text-blue-600 dark:text-blue-400" },
+    pausing:    { label: "⏸ Continue or wait…",    color: "text-blue-400 dark:text-blue-300" },
+    processing: { label: "⏳ Thinking…",            color: "text-orange-500" },
+    speaking:   { label: "🔊 Speaking…",            color: "text-purple-600 dark:text-purple-400" },
+    error:      { label: "Error",                   color: "text-destructive" },
   };
   const { label, color } = map[phase];
   return <span className={`text-xs font-medium ${color}`}>{label}</span>;
@@ -167,6 +169,12 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   const chatEndRef           = React.useRef<HTMLDivElement | null>(null);
   /** Track how many session events we have already scanned for RTC events */
   const lastEventCountRef    = React.useRef<number>(0);
+  /** Debounce timer for trigger-turn — waits 2.5s after VAD speech-end before
+   *  finalising the turn so the user can pause mid-sentence and continue. */
+  const triggerTimerRef      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** True while a pause-and-continue is in progress (timer running after speech-end).
+   *  Used so the next onSpeechStart knows NOT to reset the buffer. */
+  const isContinuationRef    = React.useRef<boolean>(false);
 
   const [phase, setPhase]           = React.useState<SessionPhase>("idle");
   const [sessionId, setSessionId]   = React.useState<string>("");
@@ -561,28 +569,56 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
       vadRef.current = new VadLoop(audioContext, localStream, {
         onVolumeChange: (level) => setMicLevel(level),
+
         onSpeechStart: () => {
           setPhase("capturing");
-          // Reset the server-side segmentation buffer the instant speech begins
-          // so the OGG sent to STT contains ONLY the user's voice, not preceding noise.
-          fetch(`/api/media-service/speech-start?sessionId=${session.sessionId}`, {
-            method: "POST",
-          }).catch(console.warn);
+
+          if (triggerTimerRef.current !== null) {
+            // ── Pause-and-continue: user resumed speaking before the 2.5s timer fired ──
+            // Cancel the pending trigger so the two speech bursts merge into one turn.
+            // Do NOT reset the server buffer — we want both halves in the same STT call.
+            clearTimeout(triggerTimerRef.current);
+            triggerTimerRef.current = null;
+            isContinuationRef.current = true;
+            console.log("[live-session-panel] speech resumed — merging with previous burst");
+          } else {
+            // ── Fresh speech start ──
+            // Reset the server buffer so only this utterance reaches STT.
+            isContinuationRef.current = false;
+            fetch(`/api/media-service/speech-start?sessionId=${session.sessionId}`, {
+              method: "POST",
+            }).catch(console.warn);
+          }
         },
+
         onSpeechEnd: () => {
-          setPhase("processing");
-          fetch(`/api/media-service/trigger-turn?sessionId=${session.sessionId}`, {
-            method: "POST",
-          })
-            .then((r) => r.json())
-            .then((data) => {
-              console.log("[live-session-panel] trigger-turn", data);
+          // Don't fire trigger-turn immediately.
+          // Wait 2.5 s — if the user speaks again within that window, cancel
+          // and let the conversation continue in the same turn.
+          if (triggerTimerRef.current !== null) {
+            clearTimeout(triggerTimerRef.current);
+          }
+
+          // Show "pausing" state so the user knows we're waiting for continuation.
+          setPhase("pausing");
+
+          triggerTimerRef.current = setTimeout(() => {
+            triggerTimerRef.current = null;
+            isContinuationRef.current = false;
+            setPhase("processing");
+
+            fetch(`/api/media-service/trigger-turn?sessionId=${session.sessionId}`, {
+              method: "POST",
             })
-            .catch(console.warn)
-            .finally(() => {
-              // Return to listening unless audio is already playing
-              setPhase((prev) => prev === "processing" ? "connected" : prev);
-            });
+              .then((r) => r.json())
+              .then((data) => {
+                console.log("[live-session-panel] trigger-turn (debounced 2.5s)", data);
+              })
+              .catch(console.warn)
+              .finally(() => {
+                setPhase((prev) => prev === "processing" ? "connected" : prev);
+              });
+          }, 2500);
         },
       });
       vadRef.current.start();
@@ -597,6 +633,13 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   }
 
   async function stop() {
+    // Cancel any pending debounced trigger-turn before tearing down.
+    if (triggerTimerRef.current !== null) {
+      clearTimeout(triggerTimerRef.current);
+      triggerTimerRef.current = null;
+    }
+    isContinuationRef.current = false;
+
     vadRef.current?.stop();
     vadRef.current = null;
     setMicLevel(0);
@@ -622,6 +665,10 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   // Cleanup on unmount
   React.useEffect(() => {
     return () => {
+      if (triggerTimerRef.current !== null) {
+        clearTimeout(triggerTimerRef.current);
+        triggerTimerRef.current = null;
+      }
       vadRef.current?.stop();
       void audioContextRef.current?.close().catch(() => undefined);
       void playbackContextRef.current?.close().catch(() => undefined);

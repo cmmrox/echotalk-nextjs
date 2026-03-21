@@ -128,10 +128,12 @@ async function runStubStt(sessionId: string, turnNumber: number) {
     };
   }
 
-  // Fix 2b: tighten the voice frame gate.
-  //   - Require at least 60 voice frames (≥ 1.2s of real speech, up from 30)
-  //   - Require average frame size ≥ 20 bytes
-  const isLikelySpeech = voiceFrames >= 60 && avgFrameSize >= 20;
+  // Fix 2b: voice frame gate.
+  //   - Require at least 20 voice frames (≥ 0.4s of speech)
+  //     Safe to keep low because the hadSpeechStart gate already ensures
+  //     only VAD-confirmed audio reaches this point.
+  //   - Require average frame size ≥ 20 bytes (screens out near-silence)
+  const isLikelySpeech = voiceFrames >= 20 && avgFrameSize >= 20;
   if (!isLikelySpeech) {
     console.log("[media-service/processing] skipping STT — likely not speech", {
       sessionId,
