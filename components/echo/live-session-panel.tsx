@@ -4,7 +4,8 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { FullWebRtcClientSession } from "@/lib/webrtc/fullClientSession";
-import { VadLoop } from "@/lib/webrtc/vadLoop";
+import type { MicVAD } from "@ricky0123/vad-web";
+import { encodeWav } from "@/lib/audio/encodeWav";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -154,7 +155,9 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 
 export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   const fullSessionRef       = React.useRef<FullWebRtcClientSession | null>(null);
-  const vadRef               = React.useRef<VadLoop | null>(null);
+  const vadRef               = React.useRef<MicVAD | null>(null);
+  /** True while AI audio is playing — Silero VAD callbacks should be ignored. */
+  const aiSpeakingRef        = React.useRef<boolean>(false);
   const audioContextRef      = React.useRef<AudioContext | null>(null);
   /** Dedicated playback context for the remote WebRTC stream — kept separate
    *  from audioContextRef (VAD mic context) to prevent Chrome suppressing
@@ -169,12 +172,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   const chatEndRef           = React.useRef<HTMLDivElement | null>(null);
   /** Track how many session events we have already scanned for RTC events */
   const lastEventCountRef    = React.useRef<number>(0);
-  /** Debounce timer for trigger-turn — waits 2.5s after VAD speech-end before
-   *  finalising the turn so the user can pause mid-sentence and continue. */
-  const triggerTimerRef      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** True while a pause-and-continue is in progress (timer running after speech-end).
-   *  Used so the next onSpeechStart knows NOT to reset the buffer. */
-  const isContinuationRef    = React.useRef<boolean>(false);
+  // (triggerTimerRef and isContinuationRef removed — Silero VAD handles segmentation natively)
 
   const [phase, setPhase]           = React.useState<SessionPhase>("idle");
   const [sessionId, setSessionId]   = React.useState<string>("");
@@ -237,7 +235,8 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
             if (startedTurn > 0 && rtcRemoteLiveRef.current) {
               rtcStartedTurnsRef.current.add(startedTurn);
             }
-            vadRef.current?.mute();
+            aiSpeakingRef.current = true;
+            vadRef.current?.pause();
             setVadMuted(true);
             setPhase("speaking");
             fetch(
@@ -245,7 +244,8 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
               { method: "POST" }
             ).catch(() => {});
           } else if (ev.type === "outbound_rtc_ended") {
-            vadRef.current?.unmute();
+            aiSpeakingRef.current = false;
+            vadRef.current?.start();
             setVadMuted(false);
             setPhase((p) => (p === "speaking" ? "connected" : p));
             fetch(
@@ -345,14 +345,16 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     // ── HTTP fallback mode: fetch MP3 and play via AudioContext / <audio>. ──
     setPhase("speaking");
     setPlayingTurn(turnNumber);
-    vadRef.current?.mute();
+    aiSpeakingRef.current = true;
+    vadRef.current?.pause();
     setVadMuted(true);
     setServerListening(false);
 
     const onPlaybackDone = () => {
       setPhase("connected");
       setPlayingTurn(null);
-      vadRef.current?.unmute();
+      aiSpeakingRef.current = false;
+      vadRef.current?.start();
       setVadMuted(false);
       setServerListening(true);
     };
@@ -567,60 +569,93 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
       const localStream = fullClient.getLocalStream();
       if (!localStream) throw new Error("Local media stream not available");
 
-      vadRef.current = new VadLoop(audioContext, localStream, {
-        onVolumeChange: (level) => setMicLevel(level),
+      // ── Silero VAD (ML-based, replaces energy-based VadLoop) ──────────────
+      // Loads ONNX model + worklet from /public/vad/ (self-hosted, no CDN).
+      // onSpeechEnd receives the COMPLETE speech segment as Float32Array at
+      // 16 kHz mono — no manual segmentation or debounce timers needed.
+      const { MicVAD } = await import("@ricky0123/vad-web");
+
+      vadRef.current = await MicVAD.new({
+        // Self-hosted assets in /public/vad/ (no CDN dependency)
+        baseAssetPath: "/vad/",
+        onnxWASMBasePath: "/vad/",
+        model: "v5",
+
+        // Share the playback AudioContext to avoid Chrome's 2-context limit
+        audioContext: audioContextRef.current ?? undefined,
+
+        // ── Tuning (all times in ms; 1 Silero v5 frame = 96ms) ──────────────
+        // positiveSpeechThreshold: probability to consider a frame as speech
+        positiveSpeechThreshold: 0.5,
+        // negativeSpeechThreshold: probability to consider a frame as silence
+        negativeSpeechThreshold: 0.35,
+        // minSpeechMs: minimum speech duration before onSpeechEnd fires
+        // 192ms (~2 frames) — catches short words like "ඔව්" or "yes"
+        minSpeechMs: 192,
+        // preSpeechPadMs: extra audio prepended before speech starts
+        // 960ms — ensures fast starters don't lose the first phoneme
+        preSpeechPadMs: 960,
+        // redemptionMs: pause tolerance within a single utterance
+        // 2400ms (~2.4s) — natural mid-sentence pauses don't split the turn;
+        // covers the "pause and continue" pattern without timer hacks
+        redemptionMs: 2400,
+        // Don't fire onSpeechEnd when VAD is paused (e.g. AI is speaking)
+        submitUserSpeechOnPause: false,
 
         onSpeechStart: () => {
+          if (aiSpeakingRef.current) return; // ignore mic pickup during AI playback
           setPhase("capturing");
+          setMicLevel(80); // show mic as active
+        },
 
-          if (triggerTimerRef.current !== null) {
-            // ── Pause-and-continue: user resumed speaking before the 2.5s timer fired ──
-            // Cancel the pending trigger so the two speech bursts merge into one turn.
-            // Do NOT reset the server buffer — we want both halves in the same STT call.
-            clearTimeout(triggerTimerRef.current);
-            triggerTimerRef.current = null;
-            isContinuationRef.current = true;
-            console.log("[live-session-panel] speech resumed — merging with previous burst");
-          } else {
-            // ── Fresh speech start ──
-            // Reset the server buffer so only this utterance reaches STT.
-            isContinuationRef.current = false;
-            fetch(`/api/media-service/speech-start?sessionId=${session.sessionId}`, {
-              method: "POST",
-            }).catch(console.warn);
+        onVADMisfire: () => {
+          // Too short to be real speech — reset to listening
+          setPhase("connected");
+          setMicLevel(0);
+        },
+
+        onSpeechEnd: async (audio: Float32Array) => {
+          if (aiSpeakingRef.current) return; // discard echo from AI speakers
+
+          setPhase("processing");
+          setMicLevel(0);
+
+          // Silero gives us a clean Float32Array of just the speech at 16 kHz.
+          // Encode as WAV and POST directly to the pipeline.
+          const wavBuffer = encodeWav(audio, 16000);
+
+          console.log("[live-session-panel] speech-turn →", {
+            samples: audio.length,
+            durationMs: Math.round(audio.length / 16000 * 1000),
+            wavBytes: wavBuffer.byteLength,
+          });
+
+          try {
+            const res = await fetch(
+              `/api/media-service/speech-turn?sessionId=${session.sessionId}`,
+              {
+                method: "POST",
+                headers: { "content-type": "audio/wav" },
+                body: wavBuffer,
+              }
+            );
+            const data = await res.json();
+            console.log("[live-session-panel] speech-turn result", data);
+          } catch (err) {
+            console.error("[live-session-panel] speech-turn failed", err);
+          } finally {
+            setPhase((prev) => prev === "processing" ? "connected" : prev);
           }
         },
 
-        onSpeechEnd: () => {
-          // Don't fire trigger-turn immediately.
-          // Wait 2.5 s — if the user speaks again within that window, cancel
-          // and let the conversation continue in the same turn.
-          if (triggerTimerRef.current !== null) {
-            clearTimeout(triggerTimerRef.current);
+        onFrameProcessed: (probs, _frame) => {
+          // Drive mic level indicator with real speech probability (0-127 scale)
+          if (!aiSpeakingRef.current) {
+            setMicLevel(Math.round(probs.isSpeech * 127));
           }
-
-          // Show "pausing" state so the user knows we're waiting for continuation.
-          setPhase("pausing");
-
-          triggerTimerRef.current = setTimeout(() => {
-            triggerTimerRef.current = null;
-            isContinuationRef.current = false;
-            setPhase("processing");
-
-            fetch(`/api/media-service/trigger-turn?sessionId=${session.sessionId}`, {
-              method: "POST",
-            })
-              .then((r) => r.json())
-              .then((data) => {
-                console.log("[live-session-panel] trigger-turn (debounced 2.5s)", data);
-              })
-              .catch(console.warn)
-              .finally(() => {
-                setPhase((prev) => prev === "processing" ? "connected" : prev);
-              });
-          }, 2500);
         },
       });
+
       vadRef.current.start();
 
       setPhase("connected");
@@ -633,15 +668,10 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   }
 
   async function stop() {
-    // Cancel any pending debounced trigger-turn before tearing down.
-    if (triggerTimerRef.current !== null) {
-      clearTimeout(triggerTimerRef.current);
-      triggerTimerRef.current = null;
-    }
-    isContinuationRef.current = false;
-
-    vadRef.current?.stop();
+    vadRef.current?.pause();
+    vadRef.current?.destroy?.();
     vadRef.current = null;
+    aiSpeakingRef.current = false;
     setMicLevel(0);
     setVadMuted(false);
     lastEventCountRef.current = 0;
@@ -665,11 +695,8 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   // Cleanup on unmount
   React.useEffect(() => {
     return () => {
-      if (triggerTimerRef.current !== null) {
-        clearTimeout(triggerTimerRef.current);
-        triggerTimerRef.current = null;
-      }
-      vadRef.current?.stop();
+      vadRef.current?.pause();
+      vadRef.current?.destroy?.();
       void audioContextRef.current?.close().catch(() => undefined);
       void playbackContextRef.current?.close().catch(() => undefined);
       void fullSessionRef.current?.stop();
