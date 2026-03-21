@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resetSegmentBuffer } from "@/media-service/segmentationBuffer";
 import { pushMediaSessionEvent } from "@/media-service/sessionManager";
 import { isSessionListening } from "@/media-service/listeningState";
+import { markSpeechStarted } from "@/media-service/speechStartTracker";
 
 export const runtime = "nodejs";
 
@@ -31,8 +32,9 @@ export async function POST(req: Request) {
   }
 
   resetSegmentBuffer(sessionId);
+  markSpeechStarted(sessionId);
 
-  console.log("[media-service/speech-start] buffer reset on speech start", { sessionId });
+  console.log("[media-service/speech-start] buffer reset + speech flagged", { sessionId });
   pushMediaSessionEvent(sessionId, "speech_start_buffer_reset", {});
 
   return NextResponse.json({ reset: true });

@@ -9,6 +9,7 @@ import {
   updateMediaSession,
 } from "@/media-service/sessionManager";
 import { isSessionListening } from "@/media-service/listeningState";
+import { clearSpeechStart } from "@/media-service/speechStartTracker";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,8 @@ export async function POST(req: Request) {
   });
 
   const processing = queueTurnIfReady(sessionId);
+  // Reset speech-start flag so the next 300-packet window requires a new signal.
+  clearSpeechStart(sessionId);
 
   updateMediaSession(sessionId, {
     turnWindow: { ...turnWindow },

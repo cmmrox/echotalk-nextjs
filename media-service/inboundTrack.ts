@@ -10,6 +10,7 @@ import {
   updateMediaSession,
 } from "@/media-service/sessionManager";
 import { isSessionListening } from "@/media-service/listeningState";
+import { clearSpeechStart, hadSpeechStart } from "@/media-service/speechStartTracker";
 
 export function attachInboundTrackObserver(params: {
   sessionId: string;
@@ -103,6 +104,22 @@ export function attachInboundTrackObserver(params: {
       }
 
       if (observer.receivedRtpPackets % 300 === 0) {
+        // Gate: only process the 300-packet window if the browser VAD signalled
+        // speech-start since the last turn. Without that signal the buffer
+        // contains only background noise — skip and discard it entirely.
+        if (!hadSpeechStart(sessionId)) {
+          console.log("[media-service/inboundTrack] 300-packet window skipped (no speech detected)", {
+            sessionId,
+            packets: observer.receivedRtpPackets,
+          });
+          pushMediaSessionEvent(sessionId, "segment_window_skipped_no_speech", {
+            packets: observer.receivedRtpPackets,
+          });
+          // Discard the accumulated noise frames so they don't bleed into next turn.
+          finalizeSegmentIfPending(sessionId);
+          return;
+        }
+
         // Bug 2 fix: use finalizeSegmentIfPending so that if VAD already
         // processed and cleared the buffer (< 20 frames remaining), this
         // time-window tick is a harmless no-op instead of re-processing an
@@ -158,6 +175,8 @@ export function attachInboundTrackObserver(params: {
           completedTurns: finalized.completedTurns,
         });
         const processing = queueTurnIfReady(sessionId);
+        // Reset speech-start flag — next 300-packet window needs a fresh signal.
+        clearSpeechStart(sessionId);
         updateMediaSession(sessionId, {
           inboundTrack: { ...observer },
           segmentation: finalized,
