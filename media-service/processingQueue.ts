@@ -94,12 +94,43 @@ async function runStubStt(sessionId: string, turnNumber: number) {
     firstFrameHex,
   });
 
-  // Fix 2: tighten the voice detection gate.
+  // Fix 2a: Check Opus TOC byte of the first real frame.
+  // Chrome uses Hybrid mode (config 12–15) or SILK mode (config 0–11) for speech.
+  // Chrome switches to CELT-only mode (config 16–31) for NON-speech audio
+  // (background noise, music, fan hum, AEC echo residue).
+  // Google STT reliably returns empty for CELT-only audio — skip it early.
+  const firstVoiceFrame = frames.find(f => f.length > 5);
+  const tocConfig = firstVoiceFrame ? (firstVoiceFrame[0] >> 3) : -1;
+  const isCeltOnly = tocConfig >= 16;
+  if (isCeltOnly) {
+    console.log("[media-service/processing] skipping STT — CELT-only Opus (non-speech audio)", {
+      sessionId,
+      turnNumber,
+      tocConfig,
+      tocByte: firstVoiceFrame?.[0].toString(16),
+      voiceFrames,
+    });
+    pushMediaSessionEvent(sessionId, "processing_stt_skipped_celt_only", {
+      turnNumber,
+      tocConfig,
+      voiceFrames,
+    });
+    return {
+      transcript: "",
+      detectedLanguage: "en-US",
+      confidence: null,
+      notes: {
+        sttApi: "v2" as const,
+        model: "stub-skipped-celt",
+        languageCodes: ["en-US"],
+        inputMimeType: mimeType,
+      },
+    };
+  }
+
+  // Fix 2b: tighten the voice frame gate.
   //   - Require at least 60 voice frames (≥ 1.2s of real speech, up from 30)
-  //   - Require average frame size ≥ 20 bytes (ambient noise typically < 20 bytes;
-  //     real speech Opus frames are usually 50–100 bytes each)
-  // Frames that pass frame-size > 5 but are actually background noise will now
-  // be caught by the avgFrameSize check, preventing wasted STT quota and silent turns.
+  //   - Require average frame size ≥ 20 bytes
   const isLikelySpeech = voiceFrames >= 60 && avgFrameSize >= 20;
   if (!isLikelySpeech) {
     console.log("[media-service/processing] skipping STT — likely not speech", {
