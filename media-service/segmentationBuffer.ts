@@ -74,6 +74,34 @@ export function snapshotSegment(sessionId: string) {
 }
 
 /**
+ * Reset the segmentation buffer without finalizing — called when VAD detects
+ * speech START so the buffer only captures frames from that moment onward.
+ * Discards any previously accumulated silence / background noise.
+ */
+export function resetSegmentBuffer(sessionId: string) {
+  const state = getSegmentationState(sessionId);
+  state.packets = [];
+  state.startedAt = undefined;
+  state.lastPacketAt = undefined;
+  // Note: completedTurns is NOT reset — it's a monotonic counter used for
+  // turn numbering and must survive buffer resets.
+}
+
+/**
+ * Reset the segment buffer without finalizing it.
+ * Called when VAD detects speech START — discards background noise that
+ * accumulated before the user started speaking so STT only sees clean speech.
+ */
+export function resetSegment(sessionId: string) {
+  const state = getSegmentationState(sessionId);
+  const discarded = state.packets.length;
+  state.packets = [];
+  state.startedAt = undefined;
+  state.lastPacketAt = undefined;
+  return { discarded };
+}
+
+/**
  * Finalize only if there are pending packets (at least 20 = ~0.4s of audio).
  * Used by VAD-triggered turn processing to avoid firing on silence gaps.
  * Returns null if there's not enough audio to bother processing.

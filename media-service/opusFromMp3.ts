@@ -12,7 +12,7 @@ import { spawn } from "child_process";
 
 const FFMPEG =
   process.env.FFMPEG_PATH ||
-  "/home/linuxbrew/.linuxbrew/bin/ffmpeg";
+  "/usr/local/bin/ffmpeg";
 
 // ---------------------------------------------------------------------------
 // OGG page parser — extracts raw Opus frame payloads from an OGG Opus buffer.

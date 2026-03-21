@@ -561,7 +561,14 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
       vadRef.current = new VadLoop(audioContext, localStream, {
         onVolumeChange: (level) => setMicLevel(level),
-        onSpeechStart: () => setPhase("capturing"),
+        onSpeechStart: () => {
+          setPhase("capturing");
+          // Reset the server-side segmentation buffer the instant speech begins
+          // so the OGG sent to STT contains ONLY the user's voice, not preceding noise.
+          fetch(`/api/media-service/speech-start?sessionId=${session.sessionId}`, {
+            method: "POST",
+          }).catch(console.warn);
+        },
         onSpeechEnd: () => {
           setPhase("processing");
           fetch(`/api/media-service/trigger-turn?sessionId=${session.sessionId}`, {
