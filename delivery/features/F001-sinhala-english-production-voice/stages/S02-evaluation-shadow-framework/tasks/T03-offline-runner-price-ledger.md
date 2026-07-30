@@ -4,7 +4,7 @@ feature: F001
 stage: S02
 slug: offline-runner-price-ledger
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -17,7 +17,7 @@ acceptance_refs: [F001-AC18]
 writable_paths: ["lib/evaluation/contracts.ts", "lib/evaluation/manifest.ts", "lib/evaluation/metrics.ts", "lib/evaluation/pricing.ts", "lib/evaluation/scorecard.ts", "scripts/evaluation/**", "evaluation/fixtures/synthetic/**", "evaluation/manifests/template.json", "config/evaluation/price-catalog.example.v1.json", "package.json", "qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/offline-runner.test.mjs", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/tasks/T03-offline-runner-price-ledger.md"]
 prohibited_paths: ["app/**", "components/**", "media-service/**", "lib/evaluation/shadowPolicy.ts", "lib/evaluation/shadowTelemetry.ts", "evaluation/data/**", "evaluation/manifests/approved/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/gates/**"]
 test_commands: ["npm run test:f001:s02:dev", "npm run typecheck", "npm run lint"]
-next_owner: solution-architect
+next_owner: full-stack-developer
 ---
 
 # T03 — Implement Offline Runner and Price Ledger
@@ -71,13 +71,17 @@ Offline command only; remove command/config to roll back.
   scripts, and developer test paths.
 - Commands run with pass/fail/blocked/skip:
   - `npm run typecheck` — pass.
-  - `npm run test:f001:s02:dev` — pass, 8/8 tests across T03 and T05.
+  - `npm run test:f001:s02:dev` — pass, 12/12 tests across T03 and T05.
   - `npm run lint` — pass with zero errors and three pre-existing warnings in
     `app/page.tsx` and `media-service/audioPackaging.ts`.
   - `git diff --check` — pass.
 - Evidence: initial implementation
   `e1637658a366ca01af5874209ecacc8e81a6f47e`; review hardening and current
   result `8de0d3691238ae6c954e642c053e519fab6fb182`.
+- Independent review: PASS at handoff commit
+  `acda63a11122e2f11cff42690ff0381bc93f7db9`; synthetic-only boundary,
+  strict schemas, artifact bindings, complete aggregates, canonical digest,
+  and small-cell suppression verified.
 - Remaining risks: real corpus and prices require human/provider verification.
-- Handoff decision and receiver: solution architect for implementation review;
-  T80 remains blocked on T04 even if this task passes review.
+- Handoff decision and receiver: T80/full-stack developer after T04; T80
+  remains blocked on the human-owned corpus, privacy, and budget approvals.
