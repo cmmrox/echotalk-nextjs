@@ -1,7 +1,7 @@
 {
   "schemaVersion": "f001-s02-v1",
   "corpusVersion": "synthetic-template-v1",
-  "manifestDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "manifestDigest": "sha256:75684aec4ff3ef4d99e56103c62131c9e62eb337167921576b271d4046d96fc7",
   "split": "dev",
   "sliceRegistryVersion": "slices-v1",
   "annotationVersion": "annotation-v1",

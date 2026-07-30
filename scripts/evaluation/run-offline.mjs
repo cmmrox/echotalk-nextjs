@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { validateGitSafeManifest } from "../../lib/evaluation/manifest.ts";
-import { buildAggregateScorecard } from "../../lib/evaluation/scorecard.ts";
+if (process.argv.length !== 2) {
+  throw new Error(
+    "The pre-T04 synthetic runner does not accept path overrides or external artifacts"
+  );
+}
 
-const root = process.cwd();
-const fixturePath = resolve(root, process.argv[2] ?? "evaluation/fixtures/synthetic/dev.v1.json");
-const catalogPath = resolve(root, process.argv[3] ?? "config/evaluation/price-catalog.example.v1.json");
-const manifestPath = resolve(root, process.argv[4] ?? "evaluation/manifests/template.json");
-
-const [fixture, priceCatalog, manifest] = await Promise.all(
-  [fixturePath, catalogPath, manifestPath].map(async (path) =>
-    JSON.parse(await readFile(path, "utf8")))
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+process.chdir(root);
+const { buildAggregateScorecard } = await import("../../lib/evaluation/scorecard.ts");
+const paths = {
+  fixture: resolve(root, "evaluation/fixtures/synthetic/dev.v1.json"),
+  catalog: resolve(root, "config/evaluation/price-catalog.example.v1.json"),
+  manifest: resolve(root, "evaluation/manifests/template.json"),
+  runSpec: resolve(root, "evaluation/fixtures/synthetic/run-spec.v1.json"),
+};
+const [fixture, priceCatalog, manifest, runSpec] = await Promise.all(
+  Object.values(paths).map(async (path) => JSON.parse(await readFile(path, "utf8")))
 );
-validateGitSafeManifest(manifest);
-const scorecard = buildAggregateScorecard({
-  runVersion: fixture.runVersion,
-  fixtureVersion: fixture.fixtureVersion,
-  minimumSliceCount: fixture.minimumSliceCount,
-  observations: fixture.observations,
-  priceCatalog,
-});
+const scorecard = buildAggregateScorecard({ runSpec, manifest, fixture, priceCatalog });
 process.stdout.write(`${JSON.stringify(scorecard, null, 2)}\n`);

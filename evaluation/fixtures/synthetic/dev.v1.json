@@ -1,6 +1,7 @@
 {
+  "schemaVersion": "synthetic-fixture-v1",
   "fixtureVersion": "synthetic-dev-v1",
-  "runVersion": "offline-runner-v1",
+  "syntheticOnly": true,
   "minimumSliceCount": 2,
   "observations": [
     {
@@ -15,6 +16,7 @@
       "clarificationRequested": true,
       "latencyMs": 410,
       "success": true,
+      "failureCode": null,
       "provider": "fake",
       "model": "fixture-v1",
       "region": "local",
@@ -32,6 +34,7 @@
       "clarificationRequested": false,
       "latencyMs": 520,
       "success": true,
+      "failureCode": null,
       "provider": "fake",
       "model": "fixture-v1",
       "region": "local",
@@ -49,10 +52,12 @@
       "clarificationRequested": false,
       "latencyMs": 760,
       "success": false,
+      "failureCode": "synthetic-mismatch",
       "provider": "fake",
       "model": "fixture-v1",
       "region": "local",
       "billingUnits": 1
     }
-  ]
+  ],
+  "skips": []
 }

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "evaluation-run-spec-v1",
+  "runVersion": "offline-runner-v1",
+  "candidateVersion": "synthetic-candidate-v1",
+  "fixtureVersion": "synthetic-dev-v1",
+  "fixtureDigest": "sha256:75684aec4ff3ef4d99e56103c62131c9e62eb337167921576b271d4046d96fc7",
+  "manifestDigest": "sha256:47c988a5544034f66a3e84a2528f50e8a9156a0f0bbef640ae68f90c7eda7a25",
+  "priceCatalogVersion": "synthetic-example-v1",
+  "priceCatalogDigest": "sha256:c64daae5d8ca89218c90ff95c6afa0a144eb5c08c962836c818839e20f02570d",
+  "evaluatorVersion": "comparison-v1",
+  "providerConfigVersion": "fake-provider-config-v1",
+  "promptVersion": "no-prompt-v1",
+  "policyVersion": "synthetic-policy-v1",
+  "syntheticOnly": true
+}
