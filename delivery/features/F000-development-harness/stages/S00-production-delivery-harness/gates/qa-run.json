@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "feature": "F000",
+  "stage": "S00",
+  "candidate_sha": "b8e40cee2e193279b173e7aab3be320e48dee858",
+  "harness_sha": "b8e40cee2e193279b173e7aab3be320e48dee858",
+  "manifest": "qa-automation/features/F000-development-harness/stages/S00.json",
+  "manifest_sha256": "0e8cd0c8d10ca6c88cb04172abf3cde8b4bfc5b6d39855f0019facd5fc1aac90",
+  "environment": {
+    "node": "v24.12.0",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "started_at": "2026-07-30T10:18:55.207Z",
+  "finished_at": "2026-07-30T10:18:57.364Z",
+  "working_tree_clean": true,
+  "certifying_run": true,
+  "qa_owner": "/root/f000_recertification_qa",
+  "result": "passed",
+  "checks": [
+    {
+      "case": "TC-F000-001",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/agent-workspace.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 320,
+      "output_sha256": "406b92693d951205f8afd861fd28d5217013bc3697238bfa17a2cdcfbd33d9e1",
+      "case_sha256": "61032a1a8c2806f3d81146c8eb668d6d3b2d0383174f8386658525a9b521474c",
+      "automation_sha256": "760f68901b130aeb93ea631e6d5824c38edee967fdf4f4950a358a2e4944224b"
+    },
+    {
+      "case": "TC-F000-002",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/delivery-traceability.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 166,
+      "output_sha256": "5bcccfc0bcf116f843032d6d7c15de7583d69269a6ac1fe9af3a3d711e2e3020",
+      "case_sha256": "bd47ffd3fafced43ce45cd3ed88ae73925fd0eebcf9347ab775c55c3bab22677",
+      "automation_sha256": "d1da08446cbf166d75c3b81e5b0471f2b71d6706bc75406f3d4433b7e7004c41"
+    },
+    {
+      "case": "TC-F000-003",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/scaffolding.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 287,
+      "output_sha256": "60ed31b1a06a7ae4e22312cd51547222beffc6827f32836fb5e9a2110968f688",
+      "case_sha256": "ee71fea43b4c74fd1a9fd8de1fbc4d18e2a991778c52924a1d92c56587db2e91",
+      "automation_sha256": "5c6da1023416401b41d14e952c4deb968bb1f9a555aca5e58c4356de66f649a5"
+    },
+    {
+      "case": "TC-F000-004",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/structure-and-runner.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 1327,
+      "output_sha256": "5ba496645b49c029057348e74b4b93a121f319985055911f44dc4998653c513f",
+      "case_sha256": "352b700cbbd79650001ca017368f44e1c1bdf7c8fa550340160cdefec1dfe6ae",
+      "automation_sha256": "d2acd0d5d6d2da1c7e765a557cb52e45dab3c0eea290f92afa27364d65fa475a"
+    },
+    {
+      "case": "TC-F000-005",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/crypto-evidence.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 56,
+      "output_sha256": "decf1c9ee28eb6087b28031c865f922c9677f0e24fbe55deaa60a774b2c9fe0b",
+      "case_sha256": "aaa259d4dc82d4880eece2676607ecdede19e6db5ce64f6d9edd1b5f27b2c442",
+      "automation_sha256": "0a09ce1ad848edfd85123c531c2175a315be5b1b57fc921cfdd18714bd663479"
+    }
+  ]
+}
