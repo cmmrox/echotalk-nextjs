@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { mediaAddIce } from "@/media-service/peerManager";
 import { getMediaSession, pushMediaSessionEvent } from "@/media-service/sessionManager";
+import {
+  guardContentLength,
+  guardMediaSessionRequest,
+} from "@/lib/http/mediaSessionGuard";
+import { LIMITS } from "@/lib/limits";
 
 export const runtime = "nodejs";
 
@@ -14,9 +19,19 @@ type IceRequest = {
 
 export async function POST(req: Request) {
   try {
+    const oversized = guardContentLength(req);
+    if (oversized) return oversized;
     const body = (await req.json().catch(() => null)) as IceRequest | null;
     const sessionId = body?.sessionId?.trim() ?? "";
     const candidate = body?.candidate?.trim() ?? "";
+    const rejected = guardMediaSessionRequest(req, sessionId);
+    if (rejected) return rejected;
+    if (!candidate || candidate.length > LIMITS.maxIceCandidateChars) {
+      return NextResponse.json(
+        { error: "bad_request", message: "Invalid ICE candidate" },
+        { status: 400 }
+      );
+    }
 
     console.log("[media-service/ice] incoming", {
       sessionId,
@@ -49,11 +64,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[media-service/ice] failed", err);
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[media-service/ice] failed", { errorClass });
     return NextResponse.json(
-      { error: "ice_failed", message },
-      { status: 500 }
+      { error: "ice_failed", message: "ICE candidate processing failed" },
+      { status: 502 }
     );
   }
 }

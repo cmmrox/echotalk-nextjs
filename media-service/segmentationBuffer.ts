@@ -114,6 +114,10 @@ export function resetSegment(sessionId: string) {
   return { discarded };
 }
 
+export function removeSegmentationState(sessionId: string) {
+  getSegmentationStore().bySession.delete(sessionId);
+}
+
 /**
  * Finalize only if there are pending packets (at least 20 = ~0.4s of audio).
  * Used by VAD-triggered turn processing to avoid firing on silence gaps.

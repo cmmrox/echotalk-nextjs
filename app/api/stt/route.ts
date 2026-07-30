@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { transcribeAudioBuffer } from "@/lib/services/stt";
+import { guardInternalProviderRequest } from "@/lib/http/internalApiGuard";
+import { LIMITS } from "@/lib/limits";
+import { guardContentLength } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    const rejected = guardInternalProviderRequest(req);
+    if (rejected) return rejected;
+    const oversized = guardContentLength(req, LIMITS.maxAudioBytes + 64 * 1024);
+    if (oversized) return oversized;
     const formData = await req.formData();
     const file = formData.get("audio");
 
@@ -21,6 +28,12 @@ export async function POST(req: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length > LIMITS.maxAudioBytes) {
+      return NextResponse.json(
+        { error: "payload_too_large", message: "Audio payload exceeds limit" },
+        { status: 413 }
+      );
+    }
 
     const result = await transcribeAudioBuffer({
       buffer,
@@ -29,10 +42,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[api/stt] failed", { errorClass });
     return NextResponse.json(
-      { error: "stt_failed", message },
-      { status: 500 }
+      { error: "stt_failed", message: "Recognition service failed" },
+      { status: 502 }
     );
   }
 }

@@ -18,6 +18,7 @@
     "release:validate": "node scripts/governance/validate-release.mjs",
     "governance:validate": "node scripts/governance/validate-governance.mjs",
     "test:governance": "node --test qa-automation/features/F000-development-harness/governance/*.test.mjs",
+    "test:f001:s01:dev": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/*.test.mjs",
     "scaffold:feature": "node scripts/governance/scaffold.mjs feature",
     "scaffold:stage": "node scripts/governance/scaffold.mjs stage",
     "scaffold:task": "node scripts/governance/scaffold.mjs task",

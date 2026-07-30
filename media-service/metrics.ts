@@ -96,3 +96,7 @@ export function buildTurnMetricPatch(turnNumber: number, patch: Partial<TurnMetr
     ...patch,
   };
 }
+
+export function removeTurnMetrics(sessionId: string) {
+  getStore().bySession.delete(sessionId);
+}

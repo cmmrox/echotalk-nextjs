@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { synthesizeSpeechBuffer } from "@/lib/services/tts";
+import { guardInternalProviderRequest } from "@/lib/http/internalApiGuard";
+import { guardContentLength } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
@@ -11,6 +13,10 @@ type TtsRequest = {
 
 export async function POST(req: Request) {
   try {
+    const rejected = guardInternalProviderRequest(req);
+    if (rejected) return rejected;
+    const oversized = guardContentLength(req);
+    if (oversized) return oversized;
     const body = (await req.json().catch(() => null)) as TtsRequest | null;
     const text = body?.text?.trim() ?? "";
     const languageCode = body?.languageCode;
@@ -25,16 +31,12 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-
-    const status =
-      message.startsWith("Missing text") || message.startsWith("TTS text too long")
-        ? 400
-        : 500;
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[api/tts] failed", { errorClass });
 
     return NextResponse.json(
-      { error: "tts_failed", message },
-      { status }
+      { error: "tts_failed", message: "Synthesis service failed" },
+      { status: 502 }
     );
   }
 }

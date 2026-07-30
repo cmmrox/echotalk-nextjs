@@ -1,6 +1,12 @@
 import { detectLanguageFromText } from "@/lib/languageDetect";
 import { LIMITS } from "@/lib/limits";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/openai";
+import {
+  PROVIDER_CONTRACT_VERSION,
+  type ProviderIdentity,
+  type ProviderUsage,
+} from "@/lib/contracts/providers";
+import { buildAgentInput } from "@/lib/contracts/agentInput";
 
 export type ConversationTurn = {
   role: "user" | "assistant";
@@ -11,12 +17,15 @@ export type ConversationTurn = {
 export type AgentReply = {
   replyText: string;
   replyLanguage: string;
+  identity: ProviderIdentity;
+  usage?: ProviderUsage;
 };
 
 export async function generateAgentReply(params: {
   transcript: string;
   detectedLanguage?: string;
   recentTurns?: ConversationTurn[];
+  idempotencyKey?: string;
 }): Promise<AgentReply> {
   const transcript = params.transcript.trim();
   const detectedLanguage = params.detectedLanguage?.trim() ?? "";
@@ -36,24 +45,12 @@ export async function generateAgentReply(params: {
   const client = getOpenAIClient();
   const model = getOpenAIModel();
 
-  const languageHint = `Reply language: ${replyLanguage}.` +
-    (detectedLanguage ? ` (STT hint: ${detectedLanguage})` : "");
-
-  const input = [
-    {
-      role: "system" as const,
-      content:
-        "You are EchoTalk, a voice assistant. Reply in the same language as the user's message. Keep it concise and natural.",
-    },
-    ...recentTurns.map((turn) => ({
-      role: turn.role,
-      content: turn.text,
-    })),
-    {
-      role: "user" as const,
-      content: `${languageHint}\nUser said: ${transcript}`,
-    },
-  ];
+  const input = buildAgentInput({
+    currentTurn: transcript,
+    detectedLanguage,
+    replyLanguage,
+    permittedHistory: recentTurns,
+  });
 
   // Retry up to 3 times on 429 (rate limit) or 503 (overloaded) with backoff.
   const MAX_RETRIES = 3;
@@ -67,18 +64,41 @@ export async function generateAgentReply(params: {
     }
 
     try {
-      const response = await client.responses.create({
-        model,
-        input,
-        max_output_tokens: 250,
-      });
+      const response = await client.responses.create(
+        {
+          model,
+          input,
+          max_output_tokens: 250,
+        },
+        params.idempotencyKey
+          ? { idempotencyKey: params.idempotencyKey }
+          : undefined
+      );
 
       let replyText = (response.output_text ?? "").trim();
       if (replyText.length > LIMITS.maxAgentReplyChars) {
         replyText = replyText.slice(0, LIMITS.maxAgentReplyChars);
       }
 
-      return { replyText, replyLanguage };
+      const usage = response.usage
+        ? {
+            inputUnits: response.usage.input_tokens,
+            outputUnits: response.usage.output_tokens,
+          }
+        : undefined;
+
+      return {
+        replyText,
+        replyLanguage,
+        identity: {
+          provider: "openai",
+          operation: "respond",
+          model,
+          configurationVersion: "prompt-v1",
+          contractVersion: PROVIDER_CONTRACT_VERSION,
+        },
+        usage,
+      };
     } catch (err) {
       lastError = err;
       const status = (err as { status?: number })?.status;
@@ -90,7 +110,10 @@ export async function generateAgentReply(params: {
         message.toLowerCase().includes("rate limit");
 
       if (!isRetryable || attempt === MAX_RETRIES - 1) throw err;
-      console.warn(`[agent] retryable error (status ${status}):`, message);
+      console.warn("[agent] retryable provider failure", {
+        status: status ?? null,
+        errorClass: err instanceof Error ? err.name : "unknown",
+      });
     }
   }
 

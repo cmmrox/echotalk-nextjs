@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getLatestStoredTtsAudio } from "@/media-service/ttsStore";
+import { guardMediaSessionRequest } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
@@ -8,12 +9,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId")?.trim() ?? "";
 
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "bad_request", message: "Missing sessionId" },
-      { status: 400 }
-    );
-  }
+  const rejected = guardMediaSessionRequest(req, sessionId);
+  if (rejected) return rejected;
 
   const latest = getLatestStoredTtsAudio(sessionId);
   if (!latest) {

@@ -69,6 +69,7 @@ export type FullSessionSnapshot = {
 
 export class FullWebRtcClientSession {
   private sessionId: string | null = null;
+  private sessionToken: string | null = null;
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
@@ -85,21 +86,32 @@ export class FullWebRtcClientSession {
     return this.remoteStream;
   }
 
+  async fetchAuthorized(input: RequestInfo | URL, init: RequestInit = {}) {
+    if (!this.sessionToken) {
+      throw new Error("Missing session authorization");
+    }
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${this.sessionToken}`);
+    return fetch(input, { ...init, headers });
+  }
+
   async createSession() {
     const res = await fetch("/api/media-service/session", { method: "POST" });
     if (!res.ok) throw new Error(`Failed to create full media session (${res.status})`);
     const data = (await res.json()) as {
       sessionId: string;
+      sessionToken: string;
       status: string;
       createdAt: string;
     };
     this.sessionId = data.sessionId;
+    this.sessionToken = data.sessionToken;
     return data;
   }
 
   async fetchSnapshot() {
     if (!this.sessionId) throw new Error("Missing session id");
-    const res = await fetch(
+    const res = await this.fetchAuthorized(
       `/api/media-service/session?sessionId=${this.sessionId}`
     );
     if (!res.ok) throw new Error(`Failed to fetch media session (${res.status})`);
@@ -150,7 +162,7 @@ export class FullWebRtcClientSession {
       console.log("[fullClientSession] remote track received", info);
 
       // Report to server so we can diagnose from server logs.
-      fetch("/api/media-service/client-event", {
+      this.fetchAuthorized("/api/media-service/client-event", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ event: "ontrack", sessionId: this.sessionId, ...info }),
@@ -179,7 +191,7 @@ export class FullWebRtcClientSession {
         sessionId: this.sessionId,
         candidateLength: event.candidate.candidate.length,
       });
-      await fetch("/api/media-service/ice", {
+      await this.fetchAuthorized("/api/media-service/ice", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -198,7 +210,7 @@ export class FullWebRtcClientSession {
     });
     await this.pc.setLocalDescription(offer);
 
-    const res = await fetch("/api/media-service/offer", {
+    const res = await this.fetchAuthorized("/api/media-service/offer", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -238,11 +250,12 @@ export class FullWebRtcClientSession {
     this.remoteStream = null;
 
     if (this.sessionId) {
-      await fetch(`/api/media-service/session?sessionId=${this.sessionId}`, {
+      await this.fetchAuthorized(`/api/media-service/session?sessionId=${this.sessionId}`, {
         method: "DELETE",
       }).catch(() => null);
     }
 
     this.sessionId = null;
+    this.sessionToken = null;
   }
 }

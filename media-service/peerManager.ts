@@ -30,6 +30,11 @@ function clearPendingIceCandidates(sessionId: string) {
   pendingIce.delete(sessionId);
 }
 
+export function clearMediaPeerEphemera(sessionId: string) {
+  clearPendingIceCandidates(sessionId);
+  removeOutboundSender(sessionId);
+}
+
 function bufferIceCandidate(sessionId: string, c: IceCandidate) {
   const existing = pendingIce.get(sessionId) ?? [];
   existing.push(c);
@@ -135,6 +140,7 @@ export async function ensureMediaPeer(sessionId: string) {
       updateMediaSession(sessionId, { status: "stopped" });
       // Re-open the listening gate in case it was left closed (AI was speaking).
       removeListeningState(sessionId);
+      clearMediaPeerEphemera(sessionId);
       // Remove the peer from the registry — session row stays so the client can
       // still read it and knows the session ended.
       getMediaServiceStore().peers.delete(sessionId);

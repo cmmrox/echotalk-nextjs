@@ -40,3 +40,24 @@ export function getLatestTurnAudio(sessionId: string) {
   const existing = getAudioStore().bySession.get(sessionId) ?? [];
   return existing[existing.length - 1] ?? null;
 }
+
+export function getTurnAudio(sessionId: string, turnNumber: number) {
+  return (
+    (getAudioStore().bySession.get(sessionId) ?? []).find(
+      (audio) => audio.turnNumber === turnNumber
+    ) ?? null
+  );
+}
+
+export function removeTurnAudio(sessionId: string, turnNumber?: number) {
+  const store = getAudioStore();
+  if (turnNumber === undefined) {
+    store.bySession.delete(sessionId);
+    return;
+  }
+  const remaining = (store.bySession.get(sessionId) ?? []).filter(
+    (audio) => audio.turnNumber !== turnNumber
+  );
+  if (remaining.length) store.bySession.set(sessionId, remaining);
+  else store.bySession.delete(sessionId);
+}

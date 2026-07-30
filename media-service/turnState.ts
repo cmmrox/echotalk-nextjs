@@ -87,3 +87,7 @@ export function markTurnPending(sessionId: string, params: {
     completedTurns: params.completedTurns,
   });
 }
+
+export function removeTurnState(sessionId: string) {
+  getTurnStore().bySession.delete(sessionId);
+}

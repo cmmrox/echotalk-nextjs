@@ -5,6 +5,7 @@ import {
   markOutboundDelivered,
 } from "@/media-service/outboundDelivery";
 import { getLatestStoredTtsAudio } from "@/media-service/ttsStore";
+import { guardMediaSessionRequest } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
@@ -14,12 +15,8 @@ export async function GET(req: Request) {
   const markDelivered = searchParams.get("markDelivered") === "1";
   const expectedTurnNumber = Number(searchParams.get("turnNumber"));
 
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "bad_request", message: "Missing sessionId" },
-      { status: 400 }
-    );
-  }
+  const rejected = guardMediaSessionRequest(req, sessionId);
+  if (rejected) return rejected;
 
   const delivery = getOutboundDeliveryState(sessionId);
   const latestTts = getLatestStoredTtsAudio(sessionId);

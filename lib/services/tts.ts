@@ -2,6 +2,11 @@ import { protos, TextToSpeechClient } from "@google-cloud/text-to-speech";
 
 import { loadGoogleServiceAccount } from "@/lib/googleAuth";
 import { LIMITS } from "@/lib/limits";
+import {
+  PROVIDER_CONTRACT_VERSION,
+  type ProviderIdentity,
+  type ProviderUsage,
+} from "@/lib/contracts/providers";
 
 function normalizeLanguageCode(languageCode: string | undefined): string {
   const raw = (languageCode ?? "").trim();
@@ -27,7 +32,13 @@ async function getTtsClient(): Promise<TextToSpeechClient> {
 export async function synthesizeSpeechBuffer(params: {
   text: string;
   languageCode?: string;
-}): Promise<{ buffer: Buffer; languageCode: string; contentType: string }> {
+}): Promise<{
+  buffer: Buffer;
+  languageCode: string;
+  contentType: string;
+  identity: ProviderIdentity;
+  usage: ProviderUsage;
+}> {
   const text = params.text.trim();
   const languageCode = normalizeLanguageCode(params.languageCode);
 
@@ -65,5 +76,15 @@ export async function synthesizeSpeechBuffer(params: {
     buffer,
     languageCode,
     contentType: "audio/mpeg",
+    identity: {
+      provider: "google",
+      operation: "synthesize",
+      model: "standard-default",
+      configurationVersion: "env-v1",
+      contractVersion: PROVIDER_CONTRACT_VERSION,
+    },
+    usage: {
+      characters: text.length,
+    },
   };
 }

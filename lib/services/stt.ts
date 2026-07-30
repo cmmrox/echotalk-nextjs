@@ -2,17 +2,39 @@ import { v2 as speechV2 } from "@google-cloud/speech";
 
 import { loadGoogleServiceAccount } from "@/lib/googleAuth";
 import { detectLanguageFromText } from "@/lib/languageDetect";
+import {
+  PROVIDER_CONTRACT_VERSION,
+  type ProviderCapability,
+  type ProviderIdentity,
+  type RecognitionSegment,
+} from "@/lib/contracts/providers";
+import { assembleRecognitionResults } from "@/lib/contracts/recognitionAssembly";
 
 export type SttResult = {
   transcript: string;
   detectedLanguage: string;
   confidence: number | null;
+  segments: RecognitionSegment[];
+  identity: ProviderIdentity;
+  capabilities: ProviderCapability;
   notes: {
     sttApi: "v2";
     model: string;
     languageCodes: string[];
     inputMimeType?: string;
   };
+};
+
+export const GOOGLE_STT_CAPABILITIES: ProviderCapability = {
+  streaming: false,
+  interimResults: false,
+  confidence: true,
+  wordTiming: false,
+  languageTags: true,
+  customVocabulary: false,
+  cancellation: false,
+  regionalProcessing: true,
+  usageReporting: false,
 };
 
 function getEnvLanguages(): string[] {
@@ -76,13 +98,10 @@ export async function transcribeAudioBuffer(params: {
     content: buffer,
   });
 
-  const results = response.results ?? [];
-  const first = results[0];
-  const alt = first?.alternatives?.[0];
-
-  const transcript = alt?.transcript?.trim() ?? "";
-  const confidence = alt?.confidence ?? null;
-  const labeledLanguage = first?.languageCode;
+  const assembled = assembleRecognitionResults(response.results ?? []);
+  const transcript = assembled.transcript;
+  const confidence = assembled.confidence;
+  const labeledLanguage = assembled.labeledLanguage;
   const detectedLanguage =
     labeledLanguage?.trim() || detectLanguageFromText(transcript);
 
@@ -90,6 +109,16 @@ export async function transcribeAudioBuffer(params: {
     transcript,
     detectedLanguage,
     confidence,
+    segments: assembled.segments,
+    identity: {
+      provider: "google",
+      operation: "recognize",
+      model,
+      region: location,
+      configurationVersion: "env-v1",
+      contractVersion: PROVIDER_CONTRACT_VERSION,
+    },
+    capabilities: GOOGLE_STT_CAPABILITIES,
     notes: {
       sttApi: "v2",
       model,

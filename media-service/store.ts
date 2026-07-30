@@ -45,6 +45,8 @@ export type MediaServiceSession = {
     role: "user" | "assistant";
     text: string;
     language?: string;
+    turnNumber?: number;
+    turnId?: string;
     at: string;
   }>;
   inboundTrack?: InboundTrackObserver;
@@ -69,6 +71,9 @@ export type MediaServiceSession = {
     processedTurns: number;
     lastQueuedAt?: string;
     lastProcessedAt?: string;
+    pendingTurnNumbers?: number[];
+    completedTurnNumbers?: number[];
+    activeTurnNumber?: number;
   };
   latestResult?: {
     turnNumber: number;

@@ -1,126 +1,115 @@
-import { buildPipelineSessionPatch, runProcessingPipeline } from "@/media-service/pipeline";
-import { clearTurnReady, getTurnWindow, markTurnPending, markTurnReady } from "@/media-service/turnState";
+import {
+  buildPipelineSessionPatch,
+  runProcessingPipeline,
+} from "@/media-service/pipeline";
+import { getTurnWindow } from "@/media-service/turnState";
 import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { updateTurnRecord } from "@/media-service/turnRecords";
 
 type ProcessingState = {
   queued: boolean;
   processing: boolean;
   processedTurns: number;
+  pendingTurnNumbers: number[];
+  completedTurnNumbers: number[];
+  activeTurnNumber?: number;
   lastQueuedAt?: string;
   lastProcessedAt?: string;
-  /** A turn arrived while we were busy — process it immediately after current finishes. */
-  pendingTurnStored: boolean;
 };
 
 declare global {
   var __echotalkProcessingQueue:
-    | {
-        bySession: Map<string, ProcessingState>;
-      }
+    | { bySession: Map<string, ProcessingState> }
     | undefined;
 }
 
 function getProcessingStore() {
   if (!globalThis.__echotalkProcessingQueue) {
-    globalThis.__echotalkProcessingQueue = {
-      bySession: new Map(),
-    };
+    globalThis.__echotalkProcessingQueue = { bySession: new Map() };
   }
-
   return globalThis.__echotalkProcessingQueue;
 }
 
 function getProcessingState(sessionId: string): ProcessingState {
-  const store = getProcessingStore();
-  const existing = store.bySession.get(sessionId);
+  const existing = getProcessingStore().bySession.get(sessionId);
   if (existing) return existing;
-
   const created: ProcessingState = {
     queued: false,
     processing: false,
     processedTurns: 0,
-    pendingTurnStored: false,
+    pendingTurnNumbers: [],
+    completedTurnNumbers: [],
   };
-  store.bySession.set(sessionId, created);
+  getProcessingStore().bySession.set(sessionId, created);
   return created;
 }
 
-export function queueTurnIfReady(sessionId: string) {
-  const turnWindow = getTurnWindow(sessionId);
-  const processing = getProcessingState(sessionId);
+function alreadyOwned(state: ProcessingState, turnNumber: number) {
+  return (
+    state.activeTurnNumber === turnNumber ||
+    state.pendingTurnNumbers.includes(turnNumber) ||
+    state.completedTurnNumbers.includes(turnNumber)
+  );
+}
 
-  console.log("[media-service/processing] queueTurnIfReady", {
-    sessionId,
-    turnReady: turnWindow.ready,
-    packetCount: turnWindow.packetCount,
-    totalBytes: turnWindow.totalBytes,
-    processing: processing.processing,
-    queued: processing.queued,
+function scheduleTurn(sessionId: string, turnNumber: number) {
+  const state = getProcessingState(sessionId);
+  if (alreadyOwned(state, turnNumber)) {
+    pushMediaSessionEvent(sessionId, "processing_duplicate_ignored", {
+      turnNumber,
+    });
+    return state;
+  }
+
+  if (state.processing || state.queued) {
+    state.pendingTurnNumbers.push(turnNumber);
+    pushMediaSessionEvent(sessionId, "processing_turn_pending_while_busy", {
+      turnNumber,
+      queueDepth: state.pendingTurnNumbers.length,
+    });
+    return state;
+  }
+
+  state.queued = true;
+  state.activeTurnNumber = turnNumber;
+  state.lastQueuedAt = new Date().toISOString();
+  updateMediaSession(sessionId, {
+    status: "processing",
+    processing: { ...state },
   });
-
-  if (!turnWindow.ready) {
-    return processing;
-  }
-
-  if (processing.processing || processing.queued) {
-    if (!processing.pendingTurnStored) {
-      processing.pendingTurnStored = true;
-      markTurnPending(sessionId, {
-        packetCount: turnWindow.packetCount,
-        totalBytes: turnWindow.totalBytes,
-        completedTurns: turnWindow.completedTurns,
-      });
-      console.log("[media-service/processing] turn queued as pending (busy)", { sessionId });
-      pushMediaSessionEvent(sessionId, "processing_turn_pending_while_busy", {
-        packetCount: turnWindow.packetCount,
-        totalBytes: turnWindow.totalBytes,
-        completedTurns: turnWindow.completedTurns,
-      });
-    }
-    return processing;
-  }
-
-  processing.queued = true;
-  processing.lastQueuedAt = new Date().toISOString();
-  updateMediaSession(sessionId, { status: "processing" });
   pushMediaSessionEvent(sessionId, "processing_queued", {
-    packetCount: turnWindow.packetCount,
-    totalBytes: turnWindow.totalBytes,
-    completedTurns: turnWindow.completedTurns,
+    turnNumber,
+    queueDepth: state.pendingTurnNumbers.length,
   });
 
   queueMicrotask(async () => {
-    console.log("[media-service/processing] microtask start", { sessionId });
     const current = getProcessingState(sessionId);
     current.queued = false;
     current.processing = true;
-    pushMediaSessionEvent(sessionId, "processing_started", {
-      packetCount: turnWindow.packetCount,
-      totalBytes: turnWindow.totalBytes,
-      completedTurns: turnWindow.completedTurns,
-    });
-
-    current.processedTurns += 1;
-    const turnNumber = current.processedTurns;
+    current.activeTurnNumber = turnNumber;
+    pushMediaSessionEvent(sessionId, "processing_started", { turnNumber });
 
     try {
-      const outcome = await runProcessingPipeline({
-        sessionId,
-        turnNumber,
-      });
-
+      const outcome = await runProcessingPipeline({ sessionId, turnNumber });
       current.lastProcessedAt = new Date().toISOString();
+      current.processedTurns += 1;
+      current.completedTurnNumbers.push(turnNumber);
+      if (current.completedTurnNumbers.length > 100) {
+        current.completedTurnNumbers.splice(
+          0,
+          current.completedTurnNumbers.length - 100
+        );
+      }
       updateMediaSession(sessionId, {
         status: "connected",
-        processing: { ...current, processing: false },
         ...buildPipelineSessionPatch(outcome),
       });
       pushMediaSessionEvent(sessionId, "processing_completed", {
         processedTurns: current.processedTurns,
-        turnNumber: outcome.turnNumber,
+        turnNumber,
         transcriptLength: outcome.transcript.length,
         replyLength: outcome.replyText.length,
         hasTts: Boolean(outcome.latestTts),
@@ -130,43 +119,53 @@ export function queueTurnIfReady(sessionId: string) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       current.lastProcessedAt = new Date().toISOString();
-      updateMediaSession(sessionId, {
-        status: "connected",
-        processing: { ...current, processing: false },
+      current.completedTurnNumbers.push(turnNumber);
+      updateTurnRecord(sessionId, turnNumber, (record) => {
+        record.state = "failed";
+        record.failureCode =
+          error instanceof Error ? error.name : "unknown_failure";
       });
+      updateMediaSession(sessionId, { status: "connected" });
       pushMediaSessionEvent(sessionId, "processing_failed", {
         turnNumber,
-        message,
+        errorClass: error instanceof Error ? error.name : "unknown",
       });
       console.error("[media-service/processing] pipeline failed", {
         sessionId,
         turnNumber,
-        message,
+        errorClass: error instanceof Error ? error.name : "unknown",
+        messageLength: message.length,
       });
     } finally {
       current.processing = false;
-      clearTurnReady(sessionId);
-
-      if (current.pendingTurnStored) {
-        current.pendingTurnStored = false;
-        console.log("[media-service/processing] processing pending turn now", { sessionId });
-        pushMediaSessionEvent(sessionId, "processing_deferred_turn_start", {});
-        const pendingTurnWindow = getTurnWindow(sessionId);
-        if (pendingTurnWindow.packetCount > 0) {
-          markTurnReady(sessionId, {
-            packetCount: pendingTurnWindow.packetCount,
-            totalBytes: pendingTurnWindow.totalBytes,
-            completedTurns: pendingTurnWindow.completedTurns,
-          });
-          queueTurnIfReady(sessionId);
-        }
+      current.activeTurnNumber = undefined;
+      updateMediaSession(sessionId, { processing: { ...current } });
+      const nextTurn = current.pendingTurnNumbers.shift();
+      if (nextTurn !== undefined) {
+        pushMediaSessionEvent(sessionId, "processing_deferred_turn_start", {
+          turnNumber: nextTurn,
+          queueDepth: current.pendingTurnNumbers.length,
+        });
+        scheduleTurn(sessionId, nextTurn);
       }
     }
   });
 
-  return processing;
+  return state;
+}
+
+export function queueTurnIfReady(sessionId: string) {
+  const turnWindow = getTurnWindow(sessionId);
+  if (!turnWindow.ready || turnWindow.completedTurns < 1) {
+    return getProcessingState(sessionId);
+  }
+  return scheduleTurn(sessionId, turnWindow.completedTurns);
 }
 
 export function getProcessingSnapshot(sessionId: string) {
   return getProcessingState(sessionId);
+}
+
+export function removeProcessingState(sessionId: string) {
+  getProcessingStore().bySession.delete(sessionId);
 }

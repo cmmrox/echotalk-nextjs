@@ -96,7 +96,13 @@ export function pushMediaSessionEvent(
 
 export function appendMediaTurn(
   sessionId: string,
-  turn: { role: "user" | "assistant"; text: string; language?: string }
+  turn: {
+    role: "user" | "assistant";
+    text: string;
+    language?: string;
+    turnNumber?: number;
+    turnId?: string;
+  }
 ): MediaServiceSession | undefined {
   const session = getMediaServiceStore().sessions.get(sessionId);
   if (!session) return undefined;

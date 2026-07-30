@@ -11,11 +11,19 @@ import {
   updateMediaSession,
 } from "@/media-service/sessionManager";
 import { appendStoredTtsAudio } from "@/media-service/ttsStore";
-import { getLatestTurnAudio } from "@/media-service/turnAudioStore";
+import {
+  getTurnAudio,
+  removeTurnAudio,
+} from "@/media-service/turnAudioStore";
+import {
+  createTurnRecord,
+  updateTurnRecord,
+} from "@/media-service/turnRecords";
 import { setSessionListening } from "@/media-service/listeningState";
 import { generateAgentReply } from "@/lib/services/agent";
 import { transcribeAudioBuffer } from "@/lib/services/stt";
 import { synthesizeSpeechBuffer } from "@/lib/services/tts";
+import { consumeProviderOperation } from "@/lib/security/providerBudget";
 
 export type PipelineOutcome = {
   turnNumber: number;
@@ -63,8 +71,12 @@ export async function runProcessingPipeline(params: {
   turnNumber: number;
 }): Promise<PipelineOutcome> {
   const { sessionId, turnNumber } = params;
+  const turnRecord = createTurnRecord(sessionId, turnNumber);
+  updateTurnRecord(sessionId, turnNumber, (record) => {
+    record.state = "recognizing";
+  });
 
-  const storedAudio = getLatestTurnAudio(sessionId);
+  const storedAudio = getTurnAudio(sessionId, turnNumber);
   const frames = storedAudio?.frames ?? [];
   const packaged = packageFramesForStt(frames);
   const buffer = packaged.buffer;
@@ -86,6 +98,11 @@ export async function runProcessingPipeline(params: {
       tocConfig,
       voiceFrames,
     });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "no_speech";
+      record.failureCode = "unsupported_opus_mode";
+    });
+    removeTurnAudio(sessionId, turnNumber);
     return {
       turnNumber,
       transcript: "",
@@ -105,6 +122,11 @@ export async function runProcessingPipeline(params: {
       silenceFrames,
       avgFrameSize,
     });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "no_speech";
+      record.failureCode = "no_usable_speech";
+    });
+    removeTurnAudio(sessionId, turnNumber);
     return {
       turnNumber,
       transcript: "",
@@ -129,6 +151,7 @@ export async function runProcessingPipeline(params: {
   });
   markTurnMetric(sessionId, turnNumber, { sttStartedAt: new Date().toISOString() });
 
+  consumeProviderOperation(sessionId, "recognize");
   const stt = await transcribeAudioBuffer({
     buffer,
     inputMimeType: mimeType,
@@ -140,16 +163,33 @@ export async function runProcessingPipeline(params: {
     detectedLanguage: stt.detectedLanguage,
   });
   markTurnMetric(sessionId, turnNumber, { sttCompletedAt: new Date().toISOString() });
+  updateTurnRecord(sessionId, turnNumber, (record) => {
+    record.state = stt.transcript.trim() ? "recognized" : "no_speech";
+    record.transcript.raw = stt.transcript;
+    record.transcript.verbatim = stt.transcript;
+    record.transcript.detectedLanguage = stt.detectedLanguage;
+    record.transcript.segments = stt.segments;
+    record.providers.push(stt.identity);
+  });
 
   let agentReplyText = "";
   let agentReplyLanguage = stt.detectedLanguage || "en-US";
 
   if (stt.transcript.trim()) {
+    // Capture permitted history before recording the current turn. The model
+    // service adds currentTurn exactly once after this chronological history.
     const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((turn) => ({
       role: turn.role,
       text: turn.text,
       language: turn.language,
     }));
+    appendMediaTurn(sessionId, {
+      role: "user",
+      text: stt.transcript,
+      language: stt.detectedLanguage,
+      turnNumber,
+      turnId: turnRecord.turnId,
+    });
 
     pushMediaSessionEvent(sessionId, "processing_agent_started", {
       turnNumber,
@@ -157,11 +197,16 @@ export async function runProcessingPipeline(params: {
       recentTurnCount: recentTurns.length,
     });
     markTurnMetric(sessionId, turnNumber, { agentStartedAt: new Date().toISOString() });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "responding";
+    });
 
+    consumeProviderOperation(sessionId, "respond");
     const agent = await generateAgentReply({
       transcript: stt.transcript,
       detectedLanguage: stt.detectedLanguage,
       recentTurns,
+      idempotencyKey: turnRecord.idempotencyKey,
     });
     agentReplyText = agent.replyText;
     agentReplyLanguage = agent.replyLanguage;
@@ -172,6 +217,14 @@ export async function runProcessingPipeline(params: {
       replyLanguage: agent.replyLanguage,
     });
     markTurnMetric(sessionId, turnNumber, { agentCompletedAt: new Date().toISOString() });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "responded";
+      record.response.displayText = agent.replyText;
+      record.response.ttsText = agent.replyText;
+      record.response.replyLanguage = agent.replyLanguage;
+      record.providers.push(agent.identity);
+      if (agent.usage) record.usage.push(agent.usage);
+    });
   }
 
   const result = appendMediaResult(sessionId, {
@@ -187,6 +240,8 @@ export async function runProcessingPipeline(params: {
       role: "assistant",
       text: result.replyText,
       language: result.replyLanguage,
+      turnNumber,
+      turnId: turnRecord.turnId,
     });
   }
 
@@ -214,7 +269,11 @@ export async function runProcessingPipeline(params: {
       languageCode: result.replyLanguage,
     });
     markTurnMetric(sessionId, turnNumber, { ttsStartedAt: new Date().toISOString() });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "synthesizing";
+    });
 
+    consumeProviderOperation(sessionId, "synthesize");
     const tts = await synthesizeSpeechBuffer({
       text: result.replyText,
       languageCode: result.replyLanguage,
@@ -296,8 +355,18 @@ export async function runProcessingPipeline(params: {
       ttsCompletedAt: new Date().toISOString(),
       playbackMode: rtcDelivered ? "rtc" : "http",
     });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "completed";
+      record.providers.push(tts.identity);
+      record.usage.push(tts.usage);
+    });
+  } else if (stt.transcript.trim()) {
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "completed";
+    });
   }
 
+  removeTurnAudio(sessionId, turnNumber);
   return {
     turnNumber,
     transcript: result.transcript,

@@ -15,6 +15,14 @@ import { setSessionListening } from "@/media-service/listeningState";
 import { generateAgentReply } from "@/lib/services/agent";
 import { transcribeAudioBuffer } from "@/lib/services/stt";
 import { synthesizeSpeechBuffer } from "@/lib/services/tts";
+import { guardMediaSessionRequest } from "@/lib/http/mediaSessionGuard";
+import { LIMITS } from "@/lib/limits";
+import {
+  allocateTurnNumber,
+  createTurnRecord,
+  updateTurnRecord,
+} from "@/media-service/turnRecords";
+import { consumeProviderOperation } from "@/lib/security/providerBudget";
 
 export const runtime = "nodejs";
 
@@ -39,12 +47,8 @@ export async function POST(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId")?.trim() ?? "";
 
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "bad_request", message: "Missing sessionId" },
-      { status: 400 }
-    );
-  }
+  const rejected = guardMediaSessionRequest(req, sessionId);
+  if (rejected) return rejected;
 
   const session = getMediaSession(sessionId);
   if (!session) {
@@ -54,16 +58,41 @@ export async function POST(req: Request) {
     );
   }
 
+  const contentType = req.headers.get("content-type")?.split(";")[0]?.trim();
+  const contentLength = Number(req.headers.get("content-length"));
+  if (
+    contentType !== "audio/wav" ||
+    (Number.isFinite(contentLength) && contentLength > LIMITS.maxAudioBytes)
+  ) {
+    return NextResponse.json(
+      { error: "bad_request", message: "Audio must be a bounded WAV payload" },
+      { status: 400 }
+    );
+  }
+
   // Read WAV bytes from body
   const arrayBuffer = await req.arrayBuffer();
   const wavBuffer = Buffer.from(arrayBuffer);
+  if (wavBuffer.length > LIMITS.maxAudioBytes) {
+    return NextResponse.json(
+      { error: "payload_too_large", message: "Audio payload exceeds limit" },
+      { status: 413 }
+    );
+  }
 
   if (wavBuffer.length < 100) {
     return NextResponse.json({ ok: true, skipped: true, reason: "audio_too_short" });
   }
 
-  console.log("[speech-turn] received audio (fallback/debug path)", {
+  const turnNumber = allocateTurnNumber(sessionId);
+  const turnRecord = createTurnRecord(sessionId, turnNumber);
+  updateTurnRecord(sessionId, turnNumber, (record) => {
+    record.state = "recognizing";
+  });
+
+  console.log("[speech-turn] received bounded audio", {
     sessionId,
+    turnNumber,
     bytes: wavBuffer.length,
     durationEstimateMs: Math.round((wavBuffer.length - 44) / 2 / 16000 * 1000),
   });
@@ -75,6 +104,7 @@ export async function POST(req: Request) {
   updateMediaSession(sessionId, { status: "processing" });
 
   // ── 1. Speech-to-Text ──────────────────────────────────────────────────────
+  consumeProviderOperation(sessionId, "recognize");
   const stt = await transcribeAudioBuffer({
     buffer: wavBuffer,
     inputMimeType: "audio/wav",
@@ -82,8 +112,17 @@ export async function POST(req: Request) {
 
   console.log("[speech-turn] STT result", {
     sessionId,
-    transcript: stt.transcript.slice(0, 120) || "(empty)",
+    turnNumber,
+    transcriptLength: stt.transcript.length,
     detectedLanguage: stt.detectedLanguage,
+  });
+  updateTurnRecord(sessionId, turnNumber, (record) => {
+    record.state = stt.transcript.trim() ? "recognized" : "no_speech";
+    record.transcript.raw = stt.transcript;
+    record.transcript.verbatim = stt.transcript;
+    record.transcript.detectedLanguage = stt.detectedLanguage;
+    record.transcript.segments = stt.segments;
+    record.providers.push(stt.identity);
   });
 
   if (!stt.transcript.trim()) {
@@ -92,11 +131,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: true, reason: "empty_transcript" });
   }
 
+  const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((t) => ({
+    role: t.role as "user" | "assistant",
+    text: t.text,
+    language: t.language,
+  }));
+
   // Store user turn in conversation history
   appendMediaTurn(sessionId, {
     role: "user",
     text: stt.transcript,
     language: stt.detectedLanguage,
+    turnNumber,
+    turnId: turnRecord.turnId,
   });
 
   pushMediaSessionEvent(sessionId, "speech_turn_stt_done", {
@@ -105,38 +152,49 @@ export async function POST(req: Request) {
   });
 
   // ── 2. Agent ───────────────────────────────────────────────────────────────
-  const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((t) => ({
-    role: t.role as "user" | "assistant",
-    text: t.text,
-    language: t.language,
-  }));
-
   let replyText = "";
   let replyLanguage = stt.detectedLanguage;
 
   try {
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "responding";
+    });
+    consumeProviderOperation(sessionId, "respond");
     const agent = await generateAgentReply({
       transcript: stt.transcript,
       detectedLanguage: stt.detectedLanguage,
       recentTurns,
+      idempotencyKey: turnRecord.idempotencyKey,
     });
     replyText = agent.replyText;
     replyLanguage = agent.replyLanguage;
     pushMediaSessionEvent(sessionId, "speech_turn_agent_done", {
       replyLength: replyText.length,
     });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "responded";
+      record.response.displayText = replyText;
+      record.response.ttsText = replyText;
+      record.response.replyLanguage = replyLanguage;
+      record.providers.push(agent.identity);
+      if (agent.usage) record.usage.push(agent.usage);
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[speech-turn] agent error", { sessionId, message });
-    pushMediaSessionEvent(sessionId, "speech_turn_agent_failed", { message });
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[speech-turn] agent error", { sessionId, turnNumber, errorClass });
+    pushMediaSessionEvent(sessionId, "speech_turn_agent_failed", { errorClass });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "failed";
+      record.failureCode = errorClass;
+    });
     updateMediaSession(sessionId, { status: "connected" });
-    return NextResponse.json({ ok: false, error: "agent_failed", message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "agent_failed", message: "Conversation service failed" },
+      { status: 502 }
+    );
   }
 
   // ── 3. Persist result + assistant turn ────────────────────────────────────
-  const currentSession = getMediaSession(sessionId);
-  const turnNumber = (currentSession?.turns.length ?? 0) + 1;
-
   const result = appendMediaResult(sessionId, {
     turnNumber,
     transcript: stt.transcript,
@@ -149,12 +207,18 @@ export async function POST(req: Request) {
     role: "assistant",
     text: replyText,
     language: replyLanguage,
+    turnNumber,
+    turnId: turnRecord.turnId,
   });
 
   updateMediaSession(sessionId, { latestResult: result, status: "speaking" });
 
   // ── 4. TTS ─────────────────────────────────────────────────────────────────
   try {
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "synthesizing";
+    });
+    consumeProviderOperation(sessionId, "synthesize");
     const tts = await synthesizeSpeechBuffer({
       text: replyText,
       languageCode: replyLanguage,
@@ -190,6 +254,11 @@ export async function POST(req: Request) {
       turnNumber,
       bytes: tts.buffer.length,
     });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "completed";
+      record.providers.push(tts.identity);
+      record.usage.push(tts.usage);
+    });
 
     // ── 5. WebRTC audio delivery (async — don't block HTTP response) ──────
     const rtcSender = getOutboundSender(sessionId);
@@ -216,9 +285,13 @@ export async function POST(req: Request) {
     }
 
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[speech-turn] TTS error", { sessionId, message });
-    pushMediaSessionEvent(sessionId, "speech_turn_tts_failed", { message });
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[speech-turn] TTS error", { sessionId, turnNumber, errorClass });
+    pushMediaSessionEvent(sessionId, "speech_turn_tts_failed", { errorClass });
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "completed";
+      record.failureCode = `tts:${errorClass}`;
+    });
     setSessionListening(sessionId, true);
     updateMediaSession(sessionId, { status: "connected" });
   }

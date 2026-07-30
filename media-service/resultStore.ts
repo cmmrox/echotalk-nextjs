@@ -40,3 +40,7 @@ export function getLatestMediaResult(sessionId: string) {
   const existing = getResultStore().bySession.get(sessionId) ?? [];
   return existing[existing.length - 1] ?? null;
 }
+
+export function removeMediaResults(sessionId: string) {
+  getResultStore().bySession.delete(sessionId);
+}

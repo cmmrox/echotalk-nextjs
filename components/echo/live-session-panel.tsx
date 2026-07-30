@@ -260,7 +260,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
             vadRef.current?.pause();
             setVadMuted(true);
             setPhase("speaking");
-            fetch(
+            client.fetchAuthorized(
               `/api/media-service/set-listening?sessionId=${client.id}&listening=0`,
               { method: "POST" }
             ).catch(() => {});
@@ -269,7 +269,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
             vadRef.current?.start();
             setVadMuted(false);
             setPhase((p) => (p === "speaking" ? "connected" : p));
-            fetch(
+            client.fetchAuthorized(
               `/api/media-service/set-listening?sessionId=${client.id}&listening=1`,
               { method: "POST" }
             ).catch(() => {});
@@ -290,9 +290,10 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
   /** Tell the server to stop/start accepting new speech turns. */
   const setServerListening = React.useCallback(
     (listening: boolean, sessionIdOverride?: string) => {
-      const id = sessionIdOverride ?? fullSessionRef.current?.id;
-      if (!id) return;
-      fetch(
+      const client = fullSessionRef.current;
+      const id = sessionIdOverride ?? client?.id;
+      if (!id || !client) return;
+      client.fetchAuthorized(
         `/api/media-service/set-listening?sessionId=${id}&listening=${listening ? 1 : 0}`,
         { method: "POST" }
       ).catch(console.warn);
@@ -391,7 +392,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
     };
 
     try {
-      const res = await fetch(
+      const res = await client.fetchAuthorized(
         `/api/media-service/outbound/latest?sessionId=${client.id}&markDelivered=1&turnNumber=${turnNumber}`
       );
       if (!res.ok) { onPlaybackDone(); return; }
@@ -486,7 +487,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
 
       /** Report browser-side events back to the server log for diagnostics. */
       const reportBrowserEvent = (type: string, data: Record<string, unknown> = {}) => {
-        fetch("/api/media-service/client-event", {
+        fullClient.fetchAuthorized("/api/media-service/client-event", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ sessionId: session.sessionId, type, ...data }),
@@ -662,7 +663,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
           });
 
           try {
-            const res = await fetch(
+            const res = await fullClient.fetchAuthorized(
               `/api/media-service/speech-turn?sessionId=${session.sessionId}`,
               {
                 method: "POST",
@@ -679,7 +680,7 @@ export function LiveSessionPanel({ onError }: LiveSessionPanelProps) {
           }
         },
 
-        onFrameProcessed: (probs, _frame) => {
+        onFrameProcessed: (probs) => {
           // Drive mic level indicator with real speech probability (0-127 scale)
           if (!aiSpeakingRef.current) {
             setMicLevel(Math.round(probs.isSpeech * 127));

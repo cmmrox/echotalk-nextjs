@@ -9,6 +9,7 @@ import {
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
+import { guardMediaSessionRequest } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
@@ -24,9 +25,11 @@ export async function POST(req: Request) {
   const sessionId  = searchParams.get("sessionId")?.trim() ?? "";
   const listeningParam = searchParams.get("listening");
 
-  if (!sessionId || listeningParam === null) {
+  const rejected = guardMediaSessionRequest(req, sessionId);
+  if (rejected) return rejected;
+  if (listeningParam === null || !["0", "1"].includes(listeningParam)) {
     return NextResponse.json(
-      { error: "bad_request", message: "Missing sessionId or listening param" },
+      { error: "bad_request", message: "Invalid listening param" },
       { status: 400 }
     );
   }

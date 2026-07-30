@@ -38,3 +38,7 @@ export function getLatestStoredTtsAudio(sessionId: string) {
   const existing = getTtsStore().bySession.get(sessionId) ?? [];
   return existing[existing.length - 1] ?? null;
 }
+
+export function removeStoredTtsAudio(sessionId: string) {
+  getTtsStore().bySession.delete(sessionId);
+}

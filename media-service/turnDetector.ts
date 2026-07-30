@@ -34,7 +34,7 @@ import {
 } from "@/media-service/sessionManager";
 import { appendTurnAudio } from "@/media-service/turnAudioStore";
 import type { TurnWindow } from "@/media-service/turnState";
-import { markTurnPending, markTurnReady, updateTurnWindow } from "@/media-service/turnState";
+import { markTurnReady, updateTurnWindow } from "@/media-service/turnState";
 
 type PacketInfo = {
   bytes: number;

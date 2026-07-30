@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { mediaAcceptOffer } from "@/media-service/peerManager";
 import { getMediaSession, pushMediaSessionEvent } from "@/media-service/sessionManager";
+import {
+  guardContentLength,
+  guardMediaSessionRequest,
+} from "@/lib/http/mediaSessionGuard";
+import { LIMITS } from "@/lib/limits";
 
 export const runtime = "nodejs";
 
@@ -13,10 +18,20 @@ type OfferRequest = {
 
 export async function POST(req: Request) {
   try {
+    const oversized = guardContentLength(req, LIMITS.maxSdpChars + 4096);
+    if (oversized) return oversized;
     const body = (await req.json().catch(() => null)) as OfferRequest | null;
     const sessionId = body?.sessionId?.trim() ?? "";
     const sdp = body?.sdp?.trim() ?? "";
     const type = body?.type?.trim() ?? "offer";
+    const rejected = guardMediaSessionRequest(req, sessionId);
+    if (rejected) return rejected;
+    if (!sdp || sdp.length > LIMITS.maxSdpChars || type !== "offer") {
+      return NextResponse.json(
+        { error: "bad_request", message: "Invalid WebRTC offer" },
+        { status: 400 }
+      );
+    }
 
     console.log("[media-service/offer] incoming", {
       sessionId,
@@ -50,11 +65,11 @@ export async function POST(req: Request) {
       accepted: true,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[media-service/offer] failed", err);
+    const errorClass = err instanceof Error ? err.name : "unknown";
+    console.error("[media-service/offer] failed", { errorClass });
     return NextResponse.json(
-      { error: "offer_failed", message },
-      { status: 500 }
+      { error: "offer_failed", message: "WebRTC offer processing failed" },
+      { status: 502 }
     );
   }
 }

@@ -1,6 +1,14 @@
 export const LIMITS = {
   maxRecordSecondsDefault: 60,
+  maxAudioBytes: 4 * 1024 * 1024,
   maxTranscriptChars: 8000,
   maxAgentReplyChars: 8000,
   maxTtsTextChars: 4000,
+  maxJsonBytes: 64 * 1024,
+  maxSdpChars: 128 * 1024,
+  maxIceCandidateChars: 4096,
+  maxClientEventFields: 24,
+  maxRequestsPerMinute: 180,
+  maxSessionCreationsPerMinute: 20,
+  maxProviderOperationsPerSession: 60,
 } as const;
