@@ -58,12 +58,36 @@ async function normalizeF000ToPlanningState(root) {
   }
 }
 
+async function normalizeF001S01ToPlanningState(root) {
+  const stagePath = join(
+    root,
+    "delivery/features/F001-sinhala-english-production-voice/stages/S01-secure-platform-baseline/stage.md"
+  );
+  await writeFile(
+    stagePath,
+    (await readFile(stagePath, "utf8"))
+      .replace(/^status: .+$/m, "status: in-progress")
+      .replace(/^candidate_sha: .+$/m, "candidate_sha: pending")
+  );
+  const taskRoot = join(stagePath, "../tasks");
+  for (const taskName of await readdir(taskRoot)) {
+    const taskPath = join(taskRoot, taskName);
+    let task = (await readFile(taskPath, "utf8"))
+      .replace(/^result_sha: .+$/m, "result_sha: pending");
+    task = taskName.startsWith("T90-")
+      ? task.replace(/^status: .+$/m, "status: draft")
+      : task.replace(/^status: .+$/m, "status: in-review");
+    await writeFile(taskPath, task);
+  }
+}
+
 test("scaffolds a valid feature, stage, and task without overwriting", async () => {
   const fixture = await mkdtemp(join(tmpdir(), "echotalk-scaffold-"));
   try {
     await cp(join(repoRoot, "docs"), join(fixture, "docs"), { recursive: true });
     await cp(join(repoRoot, "delivery"), join(fixture, "delivery"), { recursive: true });
     await normalizeF000ToPlanningState(fixture);
+    await normalizeF001S01ToPlanningState(fixture);
     await cp(join(repoRoot, ".agents", "roles"), join(fixture, ".agents", "roles"), {
       recursive: true
     });
