@@ -2,7 +2,7 @@
 id: S01
 feature: F001
 slug: secure-platform-baseline
-status: candidate-frozen
+status: qa-passed
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
 depends_on: []
 final_qa_task: T90
@@ -54,7 +54,7 @@ audio binding, idempotency, authorization, and rollback.
 | T03 auth/secrets/limits | full-stack-developer | T01 | assigned auth/middleware/API files | done |
 | T04 provider interfaces/tests | full-stack-developer | T01 | new contracts and tests | done |
 | T80 serialized integration | full-stack-developer | T02–T04 | shared pipeline/routes/config | done |
-| T90 independent QA | qa-engineer | T80 | QA and gate paths only | ready |
+| T90 independent QA | qa-engineer | T80 | QA and gate paths only | done |
 
 Tasks need exact owners/reviewers, base commit, paths, commands, and artifacts
 before the stage can become `ready`.
