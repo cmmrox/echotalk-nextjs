@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: canonical-project-knowledge
 type: architecture
-status: in-review
+status: done
 owner_role: solution-architect
 reviewer_role: business-analyst
 owner: /root
 reviewer: /root/migration_integrity_review
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: []
 requirement_refs: [F000-R01, F000-R06]
 acceptance_refs: [F000-AC01, F000-AC05]
@@ -70,6 +70,6 @@ resolve the new canonical paths.
 - Commands run with pass/fail/blocked/skip: `npm run docs:validate` passed
 - Review: `/root/migration_integrity_review` confirmed canonical links,
   archive title/body preservation, and no migration blocker
-- Evidence: result commit pending candidate freeze
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`
 - Remaining risks: old external links may continue to reference root legacy files
 - Handoff decision and receiver: BA verifies artifact language and traceability

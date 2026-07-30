@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: governance-automation-and-ci
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: qa-engineer
 owner: /root
 reviewer: /root/harness_adversarial_review
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: [T02, T03]
 requirement_refs: [F000-R04, F000-R05]
 acceptance_refs: [F000-AC02, F000-AC03, F000-AC04, F000-AC06]
@@ -75,6 +75,7 @@ unit if they block valid artifacts.
 - Review: `/root/harness_adversarial_review` reproduced and closed authority
   spoofing, fabricated hashes, empty/downgraded QA, dependency/role drift,
   post-check mutation, and dirty certification
-- Evidence: result commit pending candidate freeze; local run remains ignored
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`;
+  local run remains ignored
 - Remaining risks: later features need additional runtime QA tools
 - Handoff decision and receiver: PM completes entrypoint and legacy migration

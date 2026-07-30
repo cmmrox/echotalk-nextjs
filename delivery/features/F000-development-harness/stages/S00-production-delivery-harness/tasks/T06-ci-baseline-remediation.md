@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: ci-baseline-remediation
 type: maintenance
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: qa-engineer
 owner: /root
 reviewer: /root/harness_adversarial_review
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: [T04]
 requirement_refs: [F000-R05]
 acceptance_refs: [F000-AC02]
@@ -72,7 +72,7 @@ Ship with the CI workflow. Revert only if ESLint begins owning generated assets.
   warnings; typecheck and production build passed
 - Review: `/root/migration_integrity_review` verified the packaged FFmpeg 4.4
   binary, executable mode, Next output tracing, documentation, and build
-- Evidence: result commit pending candidate freeze
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`
 - Remaining risks: existing authored warnings remain visible; a 2026-07-30
   production dependency audit reported 26 vulnerabilities, including one
   critical and sixteen high, and blocks application production readiness until

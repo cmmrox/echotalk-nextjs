@@ -2,11 +2,11 @@
 id: S00
 feature: F000
 slug: production-delivery-harness
-status: in-progress
+status: qa-passed
 acceptance_refs: [F000-AC01, F000-AC02, F000-AC03, F000-AC04, F000-AC05, F000-AC06]
 depends_on: []
 final_qa_task: T90
-candidate_sha: pending
+candidate_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 product_owner: user-client
 human_client: user-client
 release_owner: pending-human
@@ -41,13 +41,13 @@ No production/user data is introduced.
 
 | Task | Role | Depends on | Writable paths | Status |
 |---|---|---|---|---|
-| [T01](tasks/T01-canonical-project-knowledge.md) | solution-architect | — | `docs/**` | in-review |
-| [T02](tasks/T02-delivery-artifact-contracts.md) | business-analyst | T01 | `docs/governance/**`, `delivery/**` | in-review |
-| [T03](tasks/T03-cross-tool-role-adapters.md) | full-stack-developer | T01, T02 | agent/tool adapters | in-review |
-| [T04](tasks/T04-governance-automation-and-ci.md) | full-stack-developer | T02, T03 | scripts, QA automation, CI, package scripts | in-review |
-| [T05](tasks/T05-legacy-migration-and-entrypoints.md) | project-manager | T01, T02 | archive and entrypoints | in-review |
-| [T06](tasks/T06-ci-baseline-remediation.md) | full-stack-developer | T04 | lint baseline only | in-review |
-| [T90](tasks/T90-stage-qa-automation-and-execution.md) | qa-engineer | T01–T06 | permanent QA and gate evidence only | draft |
+| [T01](tasks/T01-canonical-project-knowledge.md) | solution-architect | — | `docs/**` | done |
+| [T02](tasks/T02-delivery-artifact-contracts.md) | business-analyst | T01 | `docs/governance/**`, `delivery/**` | done |
+| [T03](tasks/T03-cross-tool-role-adapters.md) | full-stack-developer | T01, T02 | agent/tool adapters | done |
+| [T04](tasks/T04-governance-automation-and-ci.md) | full-stack-developer | T02, T03 | scripts, QA automation, CI, package scripts | done |
+| [T05](tasks/T05-legacy-migration-and-entrypoints.md) | project-manager | T01, T02 | archive and entrypoints | done |
+| [T06](tasks/T06-ci-baseline-remediation.md) | full-stack-developer | T04 | lint baseline only | done |
+| [T90](tasks/T90-stage-qa-automation-and-execution.md) | qa-engineer | T01–T06 | permanent QA and gate evidence only | done |
 
 ## Security, privacy, and abuse
 

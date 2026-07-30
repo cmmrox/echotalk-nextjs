@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: cross-tool-role-adapters
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
 reviewer: /root/router_forward_test
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: [T01, T02]
 requirement_refs: [F000-R01, F000-R02]
 acceptance_refs: [F000-AC01, F000-AC06]
@@ -70,6 +70,6 @@ generated outputs together.
   validation, and official skill validation passed
 - Review: `/root/router_forward_test` completed a fresh router scenario and
   confirmed intake, global IDs, UX routing, assignment, and QA timing
-- Evidence: result commit pending candidate freeze
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`
 - Remaining risks: tool schemas can evolve and require generator updates
 - Handoff decision and receiver: Developer wires aggregate governance checks

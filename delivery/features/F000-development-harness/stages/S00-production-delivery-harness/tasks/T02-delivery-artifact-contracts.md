@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: delivery-artifact-contracts
 type: governance
-status: in-review
+status: done
 owner_role: business-analyst
 reviewer_role: solution-architect
 owner: /root
 reviewer: /root/harness_adversarial_review
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: [T01]
 requirement_refs: [F000-R03, F000-R04]
 acceptance_refs: [F000-AC03, F000-AC06]
@@ -68,6 +68,6 @@ Revert the artifact contract and F000 delivery files together if needed.
 - Commands run with pass/fail/blocked/skip: delivery and traceability validation passed
 - Review: `/root/harness_adversarial_review` confirmed authority, evidence,
   lifecycle, and required-QA gates fail closed
-- Evidence: result commit pending candidate freeze
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`
 - Remaining risks: validators must prevent manually drifted status
 - Handoff decision and receiver: Developer implements deterministic automation

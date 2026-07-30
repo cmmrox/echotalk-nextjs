@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: stage-qa-automation-and-execution
 type: stage-qa
-status: draft
+status: done
 owner_role: qa-engineer
 reviewer_role: project-manager
-owner: pending-independent-qa
+owner: /root/f000_recertification_qa
 reviewer: /root
-base_sha: pending
-result_sha: pending
+base_sha: b8e40cee2e193279b173e7aab3be320e48dee858
+result_sha: 584c6f29406013153cfd186b3e766ba84cfd4ad1
 depends_on: [T01, T02, T03, T04, T05, T06]
 requirement_refs: [F000-R01, F000-R02, F000-R03, F000-R04, F000-R05, F000-R06]
 acceptance_refs: [F000-AC01, F000-AC02, F000-AC03, F000-AC04, F000-AC05, F000-AC06]
@@ -68,7 +68,15 @@ This task does not deploy. A material candidate change invalidates the verdict.
 ## Evidence and handoff
 
 - Actual files changed: QA automation, redacted certifying run, and QA report only
-- Commands run with pass/fail/blocked/skip: pending independent QA
-- Evidence: `gates/qa-report.md` plus ignored local stage run
-- Remaining risks: pending independent execution
-- Handoff decision and receiver: UAT Coordinator only after `qa-passed`
+- Commands run with pass/fail/blocked/skip: `npm run ci:verify`;
+  `npm run qa:stage -- F000 S00 --candidate
+  b8e40cee2e193279b173e7aab3be320e48dee858 --promote-evidence --qa-owner
+  /root/f000_recertification_qa`; post-report `npm run governance:validate`;
+  candidate/evidence diff validation — all passed
+- Evidence: five required cases passed in `gates/qa-report.md` and the promoted
+  `gates/qa-run.json`; evidence commit
+  `584c6f29406013153cfd186b3e766ba84cfd4ad1`
+- Remaining risks: the local `/root/<agent>` identity is structural; protected
+  branch review/CI or orchestrator attestation remains an external release gate
+- Handoff decision and receiver: QA recommends S00 for human client UAT;
+  UAT Coordinator receives the `qa-passed` stage

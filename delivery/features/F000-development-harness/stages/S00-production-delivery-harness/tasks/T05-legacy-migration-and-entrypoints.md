@@ -4,13 +4,13 @@ feature: F000
 stage: S00
 slug: legacy-migration-and-entrypoints
 type: documentation
-status: in-review
+status: done
 owner_role: project-manager
 reviewer_role: business-analyst
 owner: /root
 reviewer: /root/migration_integrity_review
 base_sha: dec20c441963ad53653e41225a3517ebe93f22c1
-result_sha: pending
+result_sha: b8e40cee2e193279b173e7aab3be320e48dee858
 depends_on: [T01, T02]
 requirement_refs: [F000-R01, F000-R06]
 acceptance_refs: [F000-AC05]
@@ -69,6 +69,6 @@ migration.
 - Commands run with pass/fail/blocked/skip: docs and aggregate governance validation passed
 - Review: `/root/migration_integrity_review` confirmed every migrated title,
   archived body, and active entrypoint retained its intended information
-- Evidence: result commit pending candidate freeze
+- Evidence: frozen candidate `b8e40cee2e193279b173e7aab3be320e48dee858`
 - Remaining risks: external links may reference previous file paths
 - Handoff decision and receiver: QA freezes and validates the integrated candidate
