@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "price-catalog-v1",
+  "catalogVersion": "synthetic-example-v1",
+  "entries": [
+    {
+      "provider": "fake",
+      "model": "fixture-v1",
+      "region": "local",
+      "billingUnit": "observation",
+      "microUsdPerUnit": 100,
+      "effectiveAt": "2026-07-30T00:00:00.000Z",
+      "retrievedAt": "2026-07-30T00:00:00.000Z",
+      "source": "synthetic-example:not-authoritative",
+      "classification": "synthetic-example"
+    }
+  ]
+}

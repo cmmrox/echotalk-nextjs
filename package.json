@@ -19,6 +19,8 @@
     "governance:validate": "node scripts/governance/validate-governance.mjs",
     "test:governance": "node --test qa-automation/features/F000-development-harness/governance/*.test.mjs",
     "test:f001:s01:dev": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/*.test.mjs",
+    "test:f001:s02:dev": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/*.test.mjs",
+    "evaluation:f001:s02:synthetic": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs scripts/evaluation/run-offline.mjs",
     "scaffold:feature": "node scripts/governance/scaffold.mjs feature",
     "scaffold:stage": "node scripts/governance/scaffold.mjs stage",
     "scaffold:task": "node scripts/governance/scaffold.mjs task",

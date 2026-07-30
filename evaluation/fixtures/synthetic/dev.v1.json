@@ -1,0 +1,58 @@
+{
+  "fixtureVersion": "synthetic-dev-v1",
+  "runVersion": "offline-runner-v1",
+  "minimumSliceCount": 2,
+  "observations": [
+    {
+      "fixtureId": "fictional-si-001",
+      "slices": ["sinhala-unicode", "entity-date"],
+      "reference": "හමුව ජූලි 30",
+      "hypothesis": "හමුව ජූලි 30",
+      "expectedEntities": ["ජූලි 30"],
+      "matchedEntities": ["ජූලි 30"],
+      "semanticJudgment": true,
+      "clarificationEligible": true,
+      "clarificationRequested": true,
+      "latencyMs": 410,
+      "success": true,
+      "provider": "fake",
+      "model": "fixture-v1",
+      "region": "local",
+      "billingUnits": 1
+    },
+    {
+      "fixtureId": "fictional-en-001",
+      "slices": ["sri-lankan-english", "entity-amount"],
+      "reference": "The total is 2500 rupees",
+      "hypothesis": "the total is 2500 rupees",
+      "expectedEntities": ["2500"],
+      "matchedEntities": ["2500"],
+      "semanticJudgment": true,
+      "clarificationEligible": true,
+      "clarificationRequested": false,
+      "latencyMs": 520,
+      "success": true,
+      "provider": "fake",
+      "model": "fixture-v1",
+      "region": "local",
+      "billingUnits": 1
+    },
+    {
+      "fixtureId": "fictional-mixed-001",
+      "slices": ["code-switch", "sinhala-unicode"],
+      "reference": "meeting එක හෙට",
+      "hypothesis": "meeting එක අද",
+      "expectedEntities": ["හෙට"],
+      "matchedEntities": [],
+      "semanticJudgment": false,
+      "clarificationEligible": null,
+      "clarificationRequested": false,
+      "latencyMs": 760,
+      "success": false,
+      "provider": "fake",
+      "model": "fixture-v1",
+      "region": "local",
+      "billingUnits": 1
+    }
+  ]
+}

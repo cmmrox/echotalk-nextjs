@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "f001-s02-v1",
+  "corpusVersion": "synthetic-template-v1",
+  "manifestDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "split": "dev",
+  "sliceRegistryVersion": "slices-v1",
+  "annotationVersion": "annotation-v1",
+  "consentPolicyVersion": "synthetic-no-person-v1",
+  "retentionPolicyVersion": "transient-v1",
+  "syntheticOnly": true
+}
