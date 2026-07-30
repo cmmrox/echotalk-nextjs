@@ -29,3 +29,15 @@ may select only behavior the descriptor supports.
 Contract changes require an ADR when they cross service or storage boundaries.
 Prefer additive evolution. Contract tests must use versioned redacted fixtures;
 live-provider checks are a separate, cost-limited QA surface.
+
+## S01 concrete contract
+
+`lib/contracts/providers.ts` owns the `f001-s01-v1` recognizer,
+conversation-model, synthesizer, capability, usage, identity, and normalized
+failure shapes. `lib/contracts/turns.ts` owns the `f001-s01-v1` lifecycle
+identifiers. Vendor SDK objects must be mapped before they reach orchestration.
+
+The S01 Google recognizer is synchronous and declares no streaming, interim,
+word-timing, custom-vocabulary, cancellation, or provider usage-reporting
+capability. Routing must not infer those capabilities. Later stages may add
+capabilities additively with new configuration and contract evidence.
