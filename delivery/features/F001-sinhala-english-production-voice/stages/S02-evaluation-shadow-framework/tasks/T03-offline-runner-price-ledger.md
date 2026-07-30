@@ -4,20 +4,20 @@ feature: F001
 stage: S02
 slug: offline-runner-price-ledger
 type: implementation
-status: ready
+status: in-review
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: 5b0b9ddba2374b0eaa3a828094ddada12f46a1cd
-result_sha: pending
+result_sha: e1637658a366ca01af5874209ecacc8e81a6f47e
 depends_on: [T02]
 requirement_refs: [F001-R16, F001-R18]
 acceptance_refs: [F001-AC18]
 writable_paths: ["lib/evaluation/contracts.ts", "lib/evaluation/manifest.ts", "lib/evaluation/metrics.ts", "lib/evaluation/pricing.ts", "lib/evaluation/scorecard.ts", "scripts/evaluation/**", "evaluation/fixtures/synthetic/**", "evaluation/manifests/template.json", "config/evaluation/price-catalog.example.v1.json", "package.json", "qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/offline-runner.test.mjs", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/tasks/T03-offline-runner-price-ledger.md"]
 prohibited_paths: ["app/**", "components/**", "media-service/**", "lib/evaluation/shadowPolicy.ts", "lib/evaluation/shadowTelemetry.ts", "evaluation/data/**", "evaluation/manifests/approved/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/gates/**"]
 test_commands: ["npm run test:f001:s02:dev", "npm run typecheck", "npm run lint"]
-next_owner: full-stack-developer
+next_owner: solution-architect
 ---
 
 # T03 — Implement Offline Runner and Price Ledger
@@ -66,8 +66,17 @@ Offline command only; remove command/config to roll back.
 
 ## Evidence and handoff
 
-- Actual files changed: pending implementation.
-- Commands run with pass/fail/blocked/skip: pending.
-- Evidence: pending exact result commit.
+- Actual files changed: the assigned contracts, manifest, metrics, pricing,
+  scorecard, runner, synthetic fixture/template, example catalog, package
+  scripts, and developer test paths.
+- Commands run with pass/fail/blocked/skip:
+  - `npm run typecheck` — pass.
+  - `npm run test:f001:s02:dev` — pass, 8/8 tests across T03 and T05.
+  - `npm run lint` — pass with zero errors and three pre-existing warnings in
+    `app/page.tsx` and `media-service/audioPackaging.ts`.
+  - `git diff --check` — pass.
+- Evidence: implementation commit
+  `e1637658a366ca01af5874209ecacc8e81a6f47e`.
 - Remaining risks: real corpus and prices require human/provider verification.
-- Handoff decision and receiver: T80 after architecture review.
+- Handoff decision and receiver: solution architect for implementation review;
+  T80 remains blocked on T04 even if this task passes review.

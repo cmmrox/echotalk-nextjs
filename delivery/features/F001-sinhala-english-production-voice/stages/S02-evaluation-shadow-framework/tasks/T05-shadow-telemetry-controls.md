@@ -4,20 +4,20 @@ feature: F001
 stage: S02
 slug: shadow-telemetry-controls
 type: implementation
-status: ready
+status: in-review
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: 5b0b9ddba2374b0eaa3a828094ddada12f46a1cd
-result_sha: pending
+result_sha: 7dd2ef0c32a38455dd0d85a4c8b79c940bc36da9
 depends_on: [T02]
 requirement_refs: [F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC18]
 writable_paths: [".env.example", "lib/evaluation/shadowPolicy.ts", "lib/evaluation/shadowTelemetry.ts", "qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/shadow-controls.test.mjs", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/tasks/T05-shadow-telemetry-controls.md"]
 prohibited_paths: ["app/**", "components/**", "media-service/pipeline.ts", "lib/services/**", "evaluation/data/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/gates/**"]
 test_commands: ["npm run test:f001:s02:dev", "npm run typecheck", "npm run lint"]
-next_owner: full-stack-developer
+next_owner: solution-architect
 ---
 
 # T05 — Implement Shadow Telemetry Controls
@@ -62,8 +62,16 @@ No live rollout. Disable flag and clear aggregate memory.
 
 ## Evidence and handoff
 
-- Actual files changed: pending implementation.
-- Commands run with pass/fail/blocked/skip: pending.
-- Evidence: pending exact result commit.
+- Actual files changed: `.env.example`, the assigned shadow policy and telemetry
+  modules, and the assigned developer test.
+- Commands run with pass/fail/blocked/skip:
+  - `npm run typecheck` — pass.
+  - `npm run test:f001:s02:dev` — pass, 8/8 tests across T03 and T05.
+  - `npm run lint` — pass with zero errors and three pre-existing warnings in
+    `app/page.tsx` and `media-service/audioPackaging.ts`.
+  - `git diff --check` — pass.
+- Evidence: implementation commit
+  `7dd2ef0c32a38455dd0d85a4c8b79c940bc36da9`.
 - Remaining risks: live disclosure requires T04 and later integration approval.
-- Handoff decision and receiver: T80 after architecture review.
+- Handoff decision and receiver: solution architect for implementation review;
+  T80 remains blocked on T04 even if this task passes review.
