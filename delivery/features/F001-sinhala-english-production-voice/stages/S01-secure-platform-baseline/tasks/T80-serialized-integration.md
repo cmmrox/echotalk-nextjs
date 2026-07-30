@@ -10,7 +10,7 @@ reviewer_role: solution-architect
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: ef369889ccf3144b51c94741e7aa4777edc89d18
-result_sha: 4eaa609acd0d150fec7f2c7f64e1c5119f4539c7
+result_sha: b5d02e377586c0fd7311d5589c5a5fb134a51e56
 depends_on: [T02, T03, T04]
 requirement_refs: [F001-R02, F001-R07, F001-R13, F001-R14, F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
@@ -55,13 +55,17 @@ Internal-only after review; text/route rollback preserves security fixes.
 
 - Actual files changed: product/config paths from T02-T04, S01 delivery/QA
   indexes, and the provisional-ID scaffolding regression test.
-- Commands run with pass/fail/blocked/skip: `npm run ci:verify` passed all six
-  governance validators, ten governance tests, typecheck, production build, and
-  lint with three pre-existing warnings; `npm run test:f001:s01:dev` passed ten
-  assertions. The first CI attempt failed only because the F000 scaffold test
-  hard-coded newly allocated IDs; `4eaa609` made it provisional-ID driven and
-  the complete rerun passed.
-- Evidence: architecture `9b2eb15`, implementation `d8ee765`, integration and
-  governance compatibility `4eaa609`.
-- Remaining risks: independent review and T90 are unclaimed.
-- Handoff decision and receiver: complete CI, freeze, hand to QA.
+- Commands run with pass/fail/blocked/skip: after the first architecture review
+  rejected `ae9de7f`, the blocking token bootstrap, runtime feature flag,
+  bounded-body, adapter injection, cancellation, retry-spend, provenance, and
+  fallback-serialization findings were corrected in `b5d02e3`. On that exact
+  source candidate, `npm run ci:verify` passed all six governance validators,
+  ten governance tests, typecheck, production build, and lint with three
+  pre-existing warnings; `npm run test:f001:s01:dev` passed 18 assertions.
+- Evidence: architecture `9b2eb15`, initial implementation `d8ee765`,
+  governance compatibility `4eaa609`, and corrected source candidate `b5d02e3`.
+- Remaining risks: fresh architecture approval and independent T90 are pending;
+  live-provider behavior, production identity, UAT, and release remain outside
+  this stage decision.
+- Handoff decision and receiver: architecture reviewer reassesses `b5d02e3`;
+  only an approval may advance the exact candidate to independent T90.

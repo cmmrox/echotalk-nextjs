@@ -9,7 +9,7 @@ owner_role: qa-engineer
 reviewer_role: project-manager
 owner: /root/s01_independent_qa
 reviewer: /root
-base_sha: d8ee76529d2369592054ade3a1be04fea2a2addc
+base_sha: b5d02e377586c0fd7311d5589c5a5fb134a51e56
 result_sha: pending
 depends_on: [T01, T02, T03, T04, T80]
 requirement_refs: [F001-R02, F001-R07, F001-R13, F001-R14, F001-R17, F001-R18, F001-R20]
@@ -59,6 +59,8 @@ QA recommends only; failure leaves S01 in-progress and returns defects to owners
 - Actual files changed: pending independent QA.
 - Commands run with pass/fail/blocked/skip: not run by independent QA.
 - Evidence: none yet.
-- Remaining risks: task is unclaimed; live-provider/auth integration and
-  concurrency stress are not certified.
-- Handoff decision and receiver: pending independent QA owner.
+- Remaining risks: execution is blocked until the assigned architecture
+  reviewer approves the corrected source candidate; live-provider/auth
+  integration and concurrency stress are not certified.
+- Handoff decision and receiver: assigned QA owner waits for architecture
+  approval, then independently executes against the clean candidate.
