@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: auth-secrets-and-limits
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -56,5 +56,6 @@ Legacy routes stay disabled without a server token; retain security fixes.
 - Actual files changed: listed route, client, authorization, and cleanup paths.
 - Commands run with pass/fail/blocked/skip: tests/typecheck/lint pass.
 - Evidence: no credential or private fixture entered Git.
-- Remaining risks: capability does not establish user identity.
-- Handoff decision and receiver: architecture review, then T80.
+- Remaining risks: capability does not establish user identity; T90 must verify
+  boundary behavior before any stage recommendation.
+- Handoff decision and receiver: architecture PASS; T90 receives the candidate.

@@ -2,7 +2,7 @@
 id: S01
 feature: F001
 slug: secure-platform-baseline
-status: in-progress
+status: candidate-frozen
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
 depends_on: []
 final_qa_task: T90
@@ -49,12 +49,12 @@ audio binding, idempotency, authorization, and rollback.
 
 | Task | Role | Depends on | Writable paths | Status |
 |---|---|---|---|---|
-| T01 contracts/ADRs | solution-architect | — | assigned architecture files | in-review |
-| T02 turn correctness | full-stack-developer | T01 | assigned STT/media/state files | in-review |
-| T03 auth/secrets/limits | full-stack-developer | T01 | assigned auth/middleware/API files | in-review |
-| T04 provider interfaces/tests | full-stack-developer | T01 | new contracts and tests | in-review |
-| T80 serialized integration | full-stack-developer | T02–T04 | shared pipeline/routes/config | in-review |
-| T90 independent QA | qa-engineer | T80 | QA and gate paths only | draft |
+| T01 contracts/ADRs | solution-architect | — | assigned architecture files | done |
+| T02 turn correctness | full-stack-developer | T01 | assigned STT/media/state files | done |
+| T03 auth/secrets/limits | full-stack-developer | T01 | assigned auth/middleware/API files | done |
+| T04 provider interfaces/tests | full-stack-developer | T01 | new contracts and tests | done |
+| T80 serialized integration | full-stack-developer | T02–T04 | shared pipeline/routes/config | done |
+| T90 independent QA | qa-engineer | T80 | QA and gate paths only | ready |
 
 Tasks need exact owners/reviewers, base commit, paths, commands, and artifacts
 before the stage can become `ready`.

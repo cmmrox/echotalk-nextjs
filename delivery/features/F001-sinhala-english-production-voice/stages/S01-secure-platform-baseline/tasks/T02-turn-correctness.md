@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: turn-correctness
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -56,5 +56,5 @@ Additive compatibility; rollback routing, never correctness protections.
 - Actual files changed: listed correctness and deterministic test paths.
 - Commands run with pass/fail/blocked/skip: five assertions and typecheck pass.
 - Evidence: synthetic Sinhala/English fixtures only.
-- Remaining risks: independent concurrency stress remains pending.
-- Handoff decision and receiver: architecture review, then T80.
+- Remaining risks: independent T90 concurrency stress remains pending.
+- Handoff decision and receiver: architecture PASS; T90 receives the candidate.

@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: stage-qa-automation-and-execution
 type: stage-qa
-status: draft
+status: ready
 owner_role: qa-engineer
 reviewer_role: project-manager
 owner: /root/s01_independent_qa
@@ -59,8 +59,7 @@ QA recommends only; failure leaves S01 in-progress and returns defects to owners
 - Actual files changed: pending independent QA.
 - Commands run with pass/fail/blocked/skip: not run by independent QA.
 - Evidence: none yet.
-- Remaining risks: execution is blocked until the assigned architecture
-  reviewer approves the corrected source candidate; live-provider/auth
-  integration and concurrency stress are not certified.
-- Handoff decision and receiver: assigned QA owner waits for architecture
-  approval, then independently executes against the clean candidate.
+- Remaining risks: live-provider/auth integration and concurrency stress are
+  not certified until the independent run completes.
+- Handoff decision and receiver: architecture approved `e7ca7ef`; assigned QA
+  owner may correct QA-only coverage and execute against the frozen candidate.

@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: provider-interfaces-and-tests
 type: implementation
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -57,4 +57,4 @@ Do not promote any adapter or capability without evaluation evidence.
 - Commands run with pass/fail/blocked/skip: developer tests/typecheck pass.
 - Evidence: contract version `f001-s01-v1`.
 - Remaining risks: live provider behavior is unverified.
-- Handoff decision and receiver: architecture review, then T80.
+- Handoff decision and receiver: architecture PASS; T90 receives the candidate.

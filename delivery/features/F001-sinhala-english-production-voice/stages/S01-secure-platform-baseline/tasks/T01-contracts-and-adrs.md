@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: contracts-and-adrs
 type: architecture
-status: in-review
+status: done
 owner_role: solution-architect
 reviewer_role: full-stack-developer
 owner: /root
@@ -55,7 +55,8 @@ Keep public F001 exposure disabled; retain all security fixes on rollback.
 ## Evidence and handoff
 
 - Actual files changed: ADR-0002, decision index, provider boundary, ID registry.
-- Commands run with pass/fail/blocked/skip: pending final branch verification.
+- Commands run with pass/fail/blocked/skip: independent architecture review
+  passed source `e7ca7ef` after governance, developer tests, typecheck, and lint.
 - Evidence: accepted architecture bound to F001/S01.
-- Remaining risks: independent architecture review remains pending.
-- Handoff decision and receiver: PM obtains review before `done`.
+- Remaining risks: T90, UAT, and release decisions remain independent gates.
+- Handoff decision and receiver: architecture PASS; T90 receives the candidate.

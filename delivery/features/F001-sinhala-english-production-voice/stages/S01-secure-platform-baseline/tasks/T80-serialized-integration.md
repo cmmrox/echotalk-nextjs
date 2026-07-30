@@ -4,7 +4,7 @@ feature: F001
 stage: S01
 slug: serialized-integration
 type: integration
-status: in-review
+status: done
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -69,8 +69,7 @@ Internal-only after review; text/route rollback preserves security fixes.
 - Evidence: architecture `9b2eb15`, initial implementation `d8ee765`,
   governance compatibility `4eaa609`, first correction `b5d02e3`, and second
   corrected source candidate `e7ca7ef`.
-- Remaining risks: fresh architecture approval and independent T90 are pending;
-  live-provider behavior, production identity, UAT, and release remain outside
-  this stage decision.
-- Handoff decision and receiver: architecture reviewer reassesses `e7ca7ef`;
-  only an approval may advance the exact candidate to independent T90.
+- Remaining risks: independent T90 is pending; live-provider behavior,
+  production identity, UAT, and release remain outside this stage decision.
+- Handoff decision and receiver: architecture PASS on `e7ca7ef`; independent
+  QA receives the frozen source candidate.
