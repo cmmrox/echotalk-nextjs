@@ -62,6 +62,15 @@ function alreadyOwned(state: ProcessingState, turnNumber: number) {
 }
 
 function scheduleTurn(sessionId: string, turnNumber: number) {
+  if (getSessionAbortSignal(sessionId).aborted) {
+    return {
+      queued: false,
+      processing: false,
+      processedTurns: 0,
+      pendingTurnNumbers: [],
+      completedTurnNumbers: [],
+    };
+  }
   const state = getProcessingState(sessionId);
   if (alreadyOwned(state, turnNumber)) {
     pushMediaSessionEvent(sessionId, "processing_duplicate_ignored", {
@@ -92,6 +101,7 @@ function scheduleTurn(sessionId: string, turnNumber: number) {
   });
 
   queueMicrotask(async () => {
+    if (isSessionWorkCancelled(sessionId)) return;
     const current = getProcessingState(sessionId);
     current.queued = false;
     current.processing = true;

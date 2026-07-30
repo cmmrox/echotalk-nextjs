@@ -68,6 +68,13 @@ export async function POST(req: Request) {
     );
   }
 
+  if (!getMediaSession(sessionId) || isSessionWorkCancelled(sessionId)) {
+    return NextResponse.json(
+      { error: "session_closed", message: "Session is no longer active" },
+      { status: 410, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const releaseLease = tryAcquireTurnLease(sessionId);
   if (!releaseLease) {
     return NextResponse.json(
@@ -108,12 +115,13 @@ export async function POST(req: Request) {
       record.state = acceptedTranscript.trim() ? "recognized" : "no_speech";
       record.transcript = transcriptForms;
       record.providers.push(stt.identity);
+      if (stt.usage) record.usage.push(stt.usage);
       record.route.recognizer = stt.identity;
       record.quality.recognitionConfidence = stt.confidence;
       record.quality.segmentCount = stt.segments.length;
       record.quality.hasUsableSpeech = Boolean(acceptedTranscript.trim());
       record.timing.recognizedAt = new Date().toISOString();
-      record.cost.reservedCostUsd = recognitionBudget.reservedCostUsd;
+      record.cost.reservedCostUsd = recognitionBudget.reservationCostUsd;
     });
 
     if (!acceptedTranscript.trim()) {
@@ -150,7 +158,9 @@ export async function POST(req: Request) {
       onProviderAttempt: () => {
         const budget = consumeProviderOperation(sessionId, "respond");
         updateTurnRecord(sessionId, turnNumber, (record) => {
-          record.cost.reservedCostUsd = budget.reservedCostUsd;
+          record.cost.reservedCostUsd = Number(
+            (record.cost.reservedCostUsd + budget.reservationCostUsd).toFixed(6)
+          );
         });
       },
     });
@@ -216,7 +226,9 @@ export async function POST(req: Request) {
       record.providers.push(tts.identity);
       record.route.synthesizer = tts.identity;
       if (tts.usage) record.usage.push(tts.usage);
-      record.cost.reservedCostUsd = synthesisBudget.reservedCostUsd;
+      record.cost.reservedCostUsd = Number(
+        (record.cost.reservedCostUsd + synthesisBudget.reservationCostUsd).toFixed(6)
+      );
       record.cost.reportedCostUsd = record.usage.some(
         (usage) => typeof usage.estimatedCostUsd === "number"
       )

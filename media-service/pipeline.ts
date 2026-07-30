@@ -178,12 +178,13 @@ export async function runProcessingPipeline(params: {
     record.state = acceptedTranscript.trim() ? "recognized" : "no_speech";
     record.transcript = transcriptForms;
     record.providers.push(stt.identity);
+    if (stt.usage) record.usage.push(stt.usage);
     record.route.recognizer = stt.identity;
     record.quality.recognitionConfidence = stt.confidence;
     record.quality.segmentCount = stt.segments.length;
     record.quality.hasUsableSpeech = Boolean(acceptedTranscript.trim());
     record.timing.recognizedAt = new Date().toISOString();
-    record.cost.reservedCostUsd = recognitionBudget.reservedCostUsd;
+    record.cost.reservedCostUsd = recognitionBudget.reservationCostUsd;
   });
 
   let agentReplyText = "";
@@ -225,7 +226,9 @@ export async function runProcessingPipeline(params: {
       onProviderAttempt: () => {
         const budget = consumeProviderOperation(sessionId, "respond");
         updateTurnRecord(sessionId, turnNumber, (record) => {
-          record.cost.reservedCostUsd = budget.reservedCostUsd;
+          record.cost.reservedCostUsd = Number(
+            (record.cost.reservedCostUsd + budget.reservationCostUsd).toFixed(6)
+          );
         });
       },
     });
@@ -299,7 +302,7 @@ export async function runProcessingPipeline(params: {
 
     const synthesisBudget = consumeProviderOperation(sessionId, "synthesize");
     const tts = await providers.synthesizer.synthesize({
-      text: result.replyText,
+      text: turnRecord.response.ttsText || result.replyText,
       languageCode: result.replyLanguage,
       signal,
     });
@@ -385,7 +388,9 @@ export async function runProcessingPipeline(params: {
       record.providers.push(tts.identity);
       record.route.synthesizer = tts.identity;
       if (tts.usage) record.usage.push(tts.usage);
-      record.cost.reservedCostUsd = synthesisBudget.reservedCostUsd;
+      record.cost.reservedCostUsd = Number(
+        (record.cost.reservedCostUsd + synthesisBudget.reservationCostUsd).toFixed(6)
+      );
       record.cost.reportedCostUsd = record.usage.some(
         (usage) => typeof usage.estimatedCostUsd === "number"
       )
@@ -399,6 +404,10 @@ export async function runProcessingPipeline(params: {
   } else if (acceptedTranscript.trim()) {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "completed";
+      record.timing.completedAt = new Date().toISOString();
+    });
+  } else {
+    updateTurnRecord(sessionId, turnNumber, (record) => {
       record.timing.completedAt = new Date().toISOString();
     });
   }

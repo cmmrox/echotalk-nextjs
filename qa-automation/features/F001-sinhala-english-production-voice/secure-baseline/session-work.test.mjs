@@ -4,12 +4,14 @@ import test from "node:test";
 import {
   cancelSessionWork,
   getSessionAbortSignal,
+  initializeSessionWork,
   scheduleSessionTimer,
   tryAcquireTurnLease,
 } from "../../../../media-service/sessionWork.ts";
 
 test("session turn lease serializes primary and fallback orchestration", () => {
   const sessionId = "lease-fixture";
+  initializeSessionWork(sessionId);
   const release = tryAcquireTurnLease(sessionId);
   assert.equal(typeof release, "function");
   assert.equal(tryAcquireTurnLease(sessionId), null);
@@ -18,6 +20,15 @@ test("session turn lease serializes primary and fallback orchestration", () => {
   assert.equal(typeof reacquired, "function");
   reacquired();
   cancelSessionWork(sessionId);
+});
+
+test("cleanup tombstone prevents queued work from recreating a lease", () => {
+  const sessionId = "queued-cleanup-fixture";
+  initializeSessionWork(sessionId);
+  cancelSessionWork(sessionId);
+  assert.equal(getSessionAbortSignal(sessionId).aborted, true);
+  assert.equal(tryAcquireTurnLease(sessionId), null);
+  assert.equal(scheduleSessionTimer(sessionId, () => undefined, 1), null);
 });
 
 test("session cleanup aborts work and cancels tracked timers", async () => {

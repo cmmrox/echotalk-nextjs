@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { isSessionRequestAuthorized } from "@/lib/security/sessionAuthorization";
 import { consumeRequestBudget } from "@/lib/security/requestLimits";
 import { LIMITS } from "@/lib/limits";
+import { isF001Enabled } from "@/lib/config/featureFlags";
+import { cancelSessionWork } from "@/media-service/sessionWork";
 
 export function guardContentLength(request: Request, maxBytes = LIMITS.maxJsonBytes) {
   const raw = request.headers.get("content-length");
@@ -102,7 +104,8 @@ export async function readBoundedBytes(
 
 export function guardMediaSessionRequest(
   request: Request,
-  sessionId: string
+  sessionId: string,
+  options: { allowWhenDisabled?: boolean } = {}
 ): NextResponse | null {
   if (!sessionId) {
     return NextResponse.json(
@@ -115,6 +118,14 @@ export function guardMediaSessionRequest(
     return NextResponse.json(
       { error: "unauthorized", message: "Invalid session authorization" },
       { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  if (!isF001Enabled() && !options.allowWhenDisabled) {
+    cancelSessionWork(sessionId);
+    return NextResponse.json(
+      { error: "feature_disabled", message: "Voice sessions are disabled" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
     );
   }
 

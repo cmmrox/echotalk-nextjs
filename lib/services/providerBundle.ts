@@ -10,6 +10,7 @@ import { ProviderRegistry } from "@/lib/contracts/providerRegistry";
 import { generateAgentReply } from "@/lib/services/agent";
 import { transcribeAudioBuffer } from "@/lib/services/stt";
 import { synthesizeSpeechBuffer } from "@/lib/services/tts";
+import { assertF001Enabled } from "@/lib/config/featureFlags";
 
 export type ProviderBundle = {
   recognizer: Recognizer;
@@ -85,19 +86,23 @@ const recognizer: Recognizer = {
     wordTiming: false,
     languageTags: true,
     customVocabulary: false,
-    cancellation: true,
+    cancellation: false,
+    requiredFormats: ["audio/ogg; codecs=opus", "audio/wav"],
     regionalProcessing: true,
+    configuredRetention: false,
     usageReporting: false,
   },
-  recognize: ({ audio, inputMimeType, signal }) =>
-    withDeadline({
+  recognize: ({ audio, inputMimeType, signal }) => {
+    assertF001Enabled();
+    return withDeadline({
       signal,
       timeoutMs: 20_000,
       operation: async () => transcribeAudioBuffer({
         buffer: audio,
         inputMimeType,
       }),
-    }),
+    });
+  },
 };
 
 const transcriptPolicy: TranscriptPolicy = {
@@ -121,7 +126,9 @@ const conversationModel: ConversationModel = {
     languageTags: true,
     customVocabulary: false,
     cancellation: true,
+    requiredFormats: ["text/plain"],
     regionalProcessing: false,
+    configuredRetention: false,
     usageReporting: true,
   },
   respond: ({
@@ -131,8 +138,9 @@ const conversationModel: ConversationModel = {
     idempotencyKey,
     signal,
     onProviderAttempt,
-  }) =>
-    withDeadline({
+  }) => {
+    assertF001Enabled();
+    return withDeadline({
       signal,
       timeoutMs: 25_000,
       operation: async (deadlineSignal) => {
@@ -152,7 +160,8 @@ const conversationModel: ConversationModel = {
           usage: result.usage,
         };
       },
-    }),
+    });
+  },
 };
 
 const synthesizer: Synthesizer = {
@@ -163,12 +172,15 @@ const synthesizer: Synthesizer = {
     wordTiming: false,
     languageTags: true,
     customVocabulary: false,
-    cancellation: true,
+    cancellation: false,
+    requiredFormats: ["audio/mpeg"],
     regionalProcessing: false,
+    configuredRetention: false,
     usageReporting: true,
   },
-  synthesize: ({ text, languageCode, signal }) =>
-    withDeadline({
+  synthesize: ({ text, languageCode, signal }) => {
+    assertF001Enabled();
+    return withDeadline({
       signal,
       timeoutMs: 20_000,
       operation: async () => {
@@ -181,7 +193,8 @@ const synthesizer: Synthesizer = {
           usage: result.usage,
         };
       },
-    }),
+    });
+  },
 };
 
 const defaultBundle: ProviderBundle = {

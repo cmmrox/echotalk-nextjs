@@ -75,6 +75,7 @@ export function consumeProviderOperation(
   return {
     operations: budget.operations,
     remaining: configuredLimit() - budget.operations,
+    reservationCostUsd: reservation,
     reservedCostUsd: budget.reservedCostUsd,
     remainingCostUsd: Number(
       (configuredSpendLimit() - budget.reservedCostUsd).toFixed(6)

@@ -15,6 +15,7 @@ import {
   consumeRequestBudget,
 } from "@/lib/security/requestLimits";
 import { isF001Enabled } from "@/lib/config/featureFlags";
+import { initializeSessionWork } from "@/media-service/sessionWork";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
   }
 
   const session = createMediaSession();
+  initializeSessionWork(session.id);
   const sessionToken = issueSessionToken(session.id);
   updateMediaSession(session.id, { status: "signaling" });
   console.log("[media-service/session] created", {
@@ -100,7 +102,9 @@ export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId")?.trim() ?? "";
 
-  const rejected = guardMediaSessionRequest(req, sessionId);
+  const rejected = guardMediaSessionRequest(req, sessionId, {
+    allowWhenDisabled: true,
+  });
   if (rejected) return rejected;
 
   const session = getMediaSession(sessionId);

@@ -33,7 +33,9 @@ export const GOOGLE_STT_CAPABILITIES: ProviderCapability = {
   languageTags: true,
   customVocabulary: false,
   cancellation: false,
+  requiredFormats: ["audio/ogg; codecs=opus", "audio/wav"],
   regionalProcessing: true,
+  configuredRetention: false,
   usageReporting: false,
 };
 

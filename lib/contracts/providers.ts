@@ -8,7 +8,9 @@ export type ProviderCapability = {
   languageTags: boolean;
   customVocabulary: boolean;
   cancellation: boolean;
+  requiredFormats: readonly string[];
   regionalProcessing: boolean;
+  configuredRetention: boolean;
   usageReporting: boolean;
 };
 

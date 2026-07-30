@@ -17,7 +17,9 @@ test("orchestration can replace its provider bundle with fakes", async () => {
       languageTags: true,
       customVocabulary: false,
       cancellation: false,
+      requiredFormats: ["audio/wav"],
       regionalProcessing: false,
+      configuredRetention: false,
       usageReporting: true,
     },
     async recognize() {
