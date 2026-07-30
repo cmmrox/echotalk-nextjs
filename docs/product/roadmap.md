@@ -20,40 +20,40 @@ management, rate/spend controls, consent/retention foundations, structured
 telemetry, deployment/rollback, backups, and production-like observability.
 Keep the existing voice route functioning behind controls.
 
-## F002 / S02 — Evaluation and shadow framework
+## F001 / S02 — Evaluation and shadow framework
 
 Create the licensed/consented bilingual corpus, annotation guide, versioned
 splits, STT/LLM/TTS evaluation harnesses, latency/cost ledger, provider
 interfaces, redacted fixtures, dashboards, and shadow execution. This stage
 defines evidence-based promotion thresholds.
 
-## F003 / S03 — Sinhala-first transcription
+## F001 / S03 — Sinhala-first transcription
 
 Introduce streaming STT adapters, glossary/context support, language and
 code-switch policy, confidence/agreement routing, normalization separation,
 clarification/correction UX, and safe fallback. Promote routes by evaluation
 slice, not globally.
 
-## F004 / S04 — Bilingual conversation intelligence
+## F001 / S04 — Bilingual conversation intelligence
 
 Introduce model routing, natural Sinhala system behavior, conversation memory
 policy, streaming/cancellation, safety/tool boundaries, evaluation gates,
 fallbacks, and cost control. Preserve user language and critical entities.
 
-## F005 / S05 — Natural speech output
+## F001 / S05 — Natural speech output
 
 Introduce TTS adapters, native-speaker evaluation, text normalization,
 streaming/chunking, interruption, privacy-aware caching, fallback voices, and
 voice settings. Text remains available if synthesis fails.
 
-## F006 / S06 — Real-time UX, accessibility, and resilience
+## F001 / S06 — Real-time UX, accessibility, and resilience
 
 Harden the extracted media gateway, reconnection, jitter/backpressure,
 barge-in/echo behavior, mobile/network performance, bilingual UI, transcript
 correction, consent, keyboard/screen-reader support, and end-to-end load/chaos
 tests.
 
-## F007 / S07 — Controlled general availability
+## F001 / S07 — Controlled general availability
 
 Complete threat model and privacy review, penetration/load/resilience testing,
 SLOs/on-call/runbooks, capacity and cost budgets, incident/deletion drills,

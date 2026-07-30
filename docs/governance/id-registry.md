@@ -6,8 +6,8 @@ and stale allocations in the checked-out integration candidate.
 
 | Type | Allocated | Next provisional |
 |---|---|---|
-| Feature | `F000` | `F001` |
-| Stage | `S00` | `S01` |
+| Feature | `F000`, `F001` | `F002` |
+| Stage | `S00`, `S01`, `S02`, `S03`, `S04`, `S05`, `S06`, `S07` | `S08` |
 | Architecture decision | `ADR-0001` | `ADR-0002` |
 
 Task IDs restart within a stage. QA case numbers restart within a feature.
