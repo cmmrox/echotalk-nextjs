@@ -4,13 +4,13 @@ feature: F001
 stage: S02
 slug: evaluation-specification
 type: analysis
-status: in-review
+status: done
 owner_role: business-analyst
 reviewer_role: project-manager
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: 5b0b9ddba2374b0eaa3a828094ddada12f46a1cd
-result_sha: pending
+result_sha: 96eeb1d50473315c19effb221551cb5e453e329e
 depends_on: []
 requirement_refs: [F001-R16, F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC18]
@@ -66,7 +66,8 @@ Documentation only. Rollback removes the draft method without changing runtime.
 ## Evidence and handoff
 
 - Actual files changed: evaluation specification, annotation guide, task.
-- Commands run with pass/fail/blocked/skip: pending final planning verification.
+- Commands run with pass/fail/blocked/skip: governance passed; independent
+  architecture review accepted the corrected metric/slice specification.
 - Evidence: S02 method bound to F001-R16–R18/R20 and AC18.
 - Remaining risks: human corpus, privacy, budget, thresholds, and QA pending.
-- Handoff decision and receiver: solution architect reviews before T02 closes.
+- Handoff decision and receiver: accepted; T02 architecture completed.

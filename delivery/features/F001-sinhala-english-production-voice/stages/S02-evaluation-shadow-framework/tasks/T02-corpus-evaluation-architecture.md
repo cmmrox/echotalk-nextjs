@@ -4,13 +4,13 @@ feature: F001
 stage: S02
 slug: corpus-evaluation-architecture
 type: architecture
-status: in-review
+status: done
 owner_role: solution-architect
 reviewer_role: full-stack-developer
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: 5b0b9ddba2374b0eaa3a828094ddada12f46a1cd
-result_sha: pending
+result_sha: 96eeb1d50473315c19effb221551cb5e453e329e
 depends_on: [T01]
 requirement_refs: [F001-R16, F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC18]
@@ -67,7 +67,9 @@ Shadow/capture are absent or default off. Disablement is the rollback.
 ## Evidence and handoff
 
 - Actual files changed: ADR, interface, ID registry, task.
-- Commands run with pass/fail/blocked/skip: pending architecture review.
+- Commands run with pass/fail/blocked/skip: governance passed; independent
+  architecture review accepted ADR-0003 through ADR-0005 and the contracts.
 - Evidence: explicit data ownership and human-gate boundaries.
 - Remaining risks: external storage, legal/privacy, budget, and provider terms.
-- Handoff decision and receiver: developer may implement only allowed paths.
+- Handoff decision and receiver: accepted; T03/T05 may implement only the
+  synthetic/default-off scopes.
