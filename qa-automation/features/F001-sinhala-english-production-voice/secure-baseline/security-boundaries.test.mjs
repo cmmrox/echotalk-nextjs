@@ -35,9 +35,69 @@ test("legacy provider routes fail closed behind internal authorization", async (
   }
 });
 
+test("session token is returned once and never written to the creation log", async () => {
+  const source = await readFile(
+    join(root, "app/api/media-service/session/route.ts"),
+    "utf8"
+  );
+  const creationLog = source.slice(
+    source.indexOf('console.log("[media-service/session] created"'),
+    source.indexOf("return NextResponse.json", source.indexOf('console.log("[media-service/session] created"'))
+  );
+  const response = source.slice(
+    source.indexOf("return NextResponse.json"),
+    source.indexOf("export async function GET")
+  );
+  assert.doesNotMatch(creationLog, /sessionToken/);
+  assert.match(response, /sessionToken/);
+  assert.match(response, /Cache-Control.*no-store/s);
+});
+
 test("pipeline checks usable speech before conversation provider invocation", async () => {
   const source = await readFile(join(root, "media-service/pipeline.ts"), "utf8");
   const speechGate = source.indexOf("if (!isLikelySpeech)");
-  const agentCall = source.indexOf("generateAgentReply({");
+  const agentCall = source.indexOf("providers.conversationModel.respond({");
   assert.ok(speechGate >= 0 && agentCall > speechGate);
+});
+
+test("orchestration routes resolve providers through the replaceable bundle", async () => {
+  for (const path of [
+    "media-service/pipeline.ts",
+    "app/api/media-service/speech-turn/route.ts",
+  ]) {
+    const source = await readFile(join(root, path), "utf8");
+    assert.match(source, /getProviderBundle/);
+    assert.doesNotMatch(
+      source,
+      /@\/lib\/services\/(?:stt|agent|tts)/
+    );
+  }
+});
+
+test("JSON routes use bounded streaming reads and session creation enforces feature flag", async () => {
+  for (const path of [
+    "app/api/media-service/client-event/route.ts",
+    "app/api/media-service/ice/route.ts",
+    "app/api/media-service/offer/route.ts",
+    "app/api/agent/route.ts",
+    "app/api/tts/route.ts",
+  ]) {
+    const source = await readFile(join(root, path), "utf8");
+    assert.match(source, /readBoundedJson/);
+    assert.doesNotMatch(source, /req\.json\(\)/);
+  }
+  const sessionRoute = await readFile(
+    join(root, "app/api/media-service/session/route.ts"),
+    "utf8"
+  );
+  assert.match(sessionRoute, /isF001Enabled/);
+  assert.match(sessionRoute, /feature_disabled/);
+});
+
+test("provider spend is reserved per retry attempt and capped monetarily", async () => {
+  const budget = await readFile(join(root, "lib/security/providerBudget.ts"), "utf8");
+  const pipeline = await readFile(join(root, "media-service/pipeline.ts"), "utf8");
+  assert.match(budget, /reservedCostUsd/);
+  assert.match(budget, /configuredSpendLimit/);
+  assert.match(pipeline, /onProviderAttempt/);
 });

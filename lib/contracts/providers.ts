@@ -76,6 +76,15 @@ export type RecognitionResult = {
   usage?: ProviderUsage;
 };
 
+export type TranscriptForms = {
+  raw: string;
+  verbatim: string;
+  corrected: string | null;
+  normalized: string | null;
+  detectedLanguage: string;
+  segments: RecognitionSegment[];
+};
+
 export type ConversationInputTurn = {
   role: "user" | "assistant";
   text: string;
@@ -107,6 +116,11 @@ export interface Recognizer {
   }): Promise<RecognitionResult>;
 }
 
+export interface TranscriptPolicy {
+  readonly version: string;
+  apply(result: RecognitionResult): TranscriptForms;
+}
+
 export interface ConversationModel {
   readonly capabilities: ProviderCapability;
   respond(params: {
@@ -115,6 +129,7 @@ export interface ConversationModel {
     permittedHistory: ConversationInputTurn[];
     idempotencyKey: string;
     signal?: AbortSignal;
+    onProviderAttempt?: () => void;
   }): Promise<ConversationResult>;
 }
 

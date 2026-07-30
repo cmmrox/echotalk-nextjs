@@ -1,308 +1,299 @@
 import { NextResponse } from "next/server";
 
+import {
+  guardMediaSessionRequest,
+  readBoundedBytes,
+} from "@/lib/http/mediaSessionGuard";
+import { LIMITS } from "@/lib/limits";
+import { consumeProviderOperation } from "@/lib/security/providerBudget";
+import { getProviderBundle } from "@/lib/services/providerBundle";
+import { setSessionListening } from "@/media-service/listeningState";
 import { audioBufferToOpusFrames } from "@/media-service/opusFromMp3";
 import { prepareOutboundDelivery } from "@/media-service/outboundDelivery";
-import { appendMediaResult } from "@/media-service/resultStore";
-import { appendStoredTtsAudio } from "@/media-service/ttsStore";
 import { getOutboundSender, scheduleOutboundAudio } from "@/media-service/outboundAudioTrack";
+import { appendMediaResult } from "@/media-service/resultStore";
 import {
   appendMediaTurn,
   getMediaSession,
   pushMediaSessionEvent,
   updateMediaSession,
 } from "@/media-service/sessionManager";
-import { setSessionListening } from "@/media-service/listeningState";
-import { generateAgentReply } from "@/lib/services/agent";
-import { transcribeAudioBuffer } from "@/lib/services/stt";
-import { synthesizeSpeechBuffer } from "@/lib/services/tts";
-import { guardMediaSessionRequest } from "@/lib/http/mediaSessionGuard";
-import { LIMITS } from "@/lib/limits";
+import {
+  getSessionAbortSignal,
+  isSessionWorkCancelled,
+  scheduleSessionTimer,
+  tryAcquireTurnLease,
+} from "@/media-service/sessionWork";
+import { appendStoredTtsAudio } from "@/media-service/ttsStore";
 import {
   allocateTurnNumber,
   createTurnRecord,
   updateTurnRecord,
 } from "@/media-service/turnRecords";
-import { consumeProviderOperation } from "@/lib/security/providerBudget";
 
 export const runtime = "nodejs";
 
 /**
- * POST /api/media-service/speech-turn?sessionId=…
- * Content-Type: audio/wav
- * Body: raw WAV bytes (16 kHz mono PCM from Silero VAD)
- *
- * FALLBACK / DEBUG TURN PATH.
- *
- * Phase 1 architecture lock: the primary live path is the continuous media
- * service session with server-owned turn processing. This route is kept only as
- * a compatibility/debug path while the live stack is refactored incrementally.
- *
- * Full pipeline here remains:
- * WAV → Google STT → OpenAI Agent → Google TTS → WebRTC push
- *
- * Returns immediately with transcript + reply so the UI updates fast.
- * TTS audio is scheduled asynchronously over WebRTC.
+ * Bounded fallback/debug turn path. The primary live path remains the
+ * continuous media-service session and server-owned processing queue.
  */
 export async function POST(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("sessionId")?.trim() ?? "";
-
   const rejected = guardMediaSessionRequest(req, sessionId);
   if (rejected) return rejected;
 
-  const session = getMediaSession(sessionId);
-  if (!session) {
+  if (!getMediaSession(sessionId)) {
     return NextResponse.json(
       { error: "not_found", message: "Session not found" },
-      { status: 404 }
+      { status: 404, headers: { "Cache-Control": "no-store" } }
     );
   }
 
   const contentType = req.headers.get("content-type")?.split(";")[0]?.trim();
-  const contentLength = Number(req.headers.get("content-length"));
-  if (
-    contentType !== "audio/wav" ||
-    (Number.isFinite(contentLength) && contentLength > LIMITS.maxAudioBytes)
-  ) {
+  if (contentType !== "audio/wav") {
     return NextResponse.json(
       { error: "bad_request", message: "Audio must be a bounded WAV payload" },
-      { status: 400 }
+      { status: 400, headers: { "Cache-Control": "no-store" } }
     );
   }
 
-  // Read WAV bytes from body
-  const arrayBuffer = await req.arrayBuffer();
-  const wavBuffer = Buffer.from(arrayBuffer);
-  if (wavBuffer.length > LIMITS.maxAudioBytes) {
-    return NextResponse.json(
-      { error: "payload_too_large", message: "Audio payload exceeds limit" },
-      { status: 413 }
-    );
-  }
-
+  const boundedBody = await readBoundedBytes(req, LIMITS.maxAudioBytes);
+  if (!boundedBody.ok) return boundedBody.response;
+  const wavBuffer = boundedBody.value;
   if (wavBuffer.length < 100) {
-    return NextResponse.json({ ok: true, skipped: true, reason: "audio_too_short" });
+    return NextResponse.json(
+      { ok: true, skipped: true, reason: "audio_too_short" },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  const releaseLease = tryAcquireTurnLease(sessionId);
+  if (!releaseLease) {
+    return NextResponse.json(
+      { error: "turn_in_progress", message: "Another turn is already processing" },
+      { status: 409, headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   const turnNumber = allocateTurnNumber(sessionId);
   const turnRecord = createTurnRecord(sessionId, turnNumber);
-  updateTurnRecord(sessionId, turnNumber, (record) => {
-    record.state = "recognizing";
-  });
-
-  console.log("[speech-turn] received bounded audio", {
-    sessionId,
-    turnNumber,
-    bytes: wavBuffer.length,
-    durationEstimateMs: Math.round((wavBuffer.length - 44) / 2 / 16000 * 1000),
-  });
-
-  pushMediaSessionEvent(sessionId, "speech_turn_received", {
-    bytes: wavBuffer.length,
-    routeMode: "fallback_debug",
-  });
-  updateMediaSession(sessionId, { status: "processing" });
-
-  // ── 1. Speech-to-Text ──────────────────────────────────────────────────────
-  consumeProviderOperation(sessionId, "recognize");
-  const stt = await transcribeAudioBuffer({
-    buffer: wavBuffer,
-    inputMimeType: "audio/wav",
-  });
-
-  console.log("[speech-turn] STT result", {
-    sessionId,
-    turnNumber,
-    transcriptLength: stt.transcript.length,
-    detectedLanguage: stt.detectedLanguage,
-  });
-  updateTurnRecord(sessionId, turnNumber, (record) => {
-    record.state = stt.transcript.trim() ? "recognized" : "no_speech";
-    record.transcript.raw = stt.transcript;
-    record.transcript.verbatim = stt.transcript;
-    record.transcript.detectedLanguage = stt.detectedLanguage;
-    record.transcript.segments = stt.segments;
-    record.providers.push(stt.identity);
-  });
-
-  if (!stt.transcript.trim()) {
-    updateMediaSession(sessionId, { status: "connected" });
-    pushMediaSessionEvent(sessionId, "speech_turn_empty_transcript", {});
-    return NextResponse.json({ ok: true, skipped: true, reason: "empty_transcript" });
-  }
-
-  const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((t) => ({
-    role: t.role as "user" | "assistant",
-    text: t.text,
-    language: t.language,
-  }));
-
-  // Store user turn in conversation history
-  appendMediaTurn(sessionId, {
-    role: "user",
-    text: stt.transcript,
-    language: stt.detectedLanguage,
-    turnNumber,
-    turnId: turnRecord.turnId,
-  });
-
-  pushMediaSessionEvent(sessionId, "speech_turn_stt_done", {
-    transcriptLength: stt.transcript.length,
-    detectedLanguage: stt.detectedLanguage,
-  });
-
-  // ── 2. Agent ───────────────────────────────────────────────────────────────
-  let replyText = "";
-  let replyLanguage = stt.detectedLanguage;
+  const providers = getProviderBundle();
+  const signal = getSessionAbortSignal(sessionId);
 
   try {
     updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = "recognizing";
+      record.timing.recognitionStartedAt = new Date().toISOString();
+      record.route.transcriptPolicyVersion = providers.transcriptPolicy.version;
+    });
+    pushMediaSessionEvent(sessionId, "speech_turn_received", {
+      bytes: wavBuffer.length,
+      routeMode: "fallback_debug",
+    });
+    updateMediaSession(sessionId, { status: "processing" });
+
+    const recognitionBudget = consumeProviderOperation(sessionId, "recognize");
+    const stt = await providers.recognizer.recognize({
+      audio: wavBuffer,
+      inputMimeType: "audio/wav",
+      signal,
+    });
+    const transcriptForms = providers.transcriptPolicy.apply(stt);
+    const acceptedTranscript =
+      transcriptForms.corrected ??
+      transcriptForms.normalized ??
+      transcriptForms.verbatim;
+    updateTurnRecord(sessionId, turnNumber, (record) => {
+      record.state = acceptedTranscript.trim() ? "recognized" : "no_speech";
+      record.transcript = transcriptForms;
+      record.providers.push(stt.identity);
+      record.route.recognizer = stt.identity;
+      record.quality.recognitionConfidence = stt.confidence;
+      record.quality.segmentCount = stt.segments.length;
+      record.quality.hasUsableSpeech = Boolean(acceptedTranscript.trim());
+      record.timing.recognizedAt = new Date().toISOString();
+      record.cost.reservedCostUsd = recognitionBudget.reservedCostUsd;
+    });
+
+    if (!acceptedTranscript.trim()) {
+      updateMediaSession(sessionId, { status: "connected" });
+      return NextResponse.json(
+        { ok: true, skipped: true, reason: "empty_transcript" },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((turn) => ({
+      role: turn.role as "user" | "assistant",
+      text: turn.text,
+      language: turn.language,
+    }));
+    appendMediaTurn(sessionId, {
+      role: "user",
+      text: acceptedTranscript,
+      language: stt.detectedLanguage,
+      turnNumber,
+      turnId: turnRecord.turnId,
+    });
+
+    updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "responding";
+      record.timing.responseStartedAt = new Date().toISOString();
     });
-    consumeProviderOperation(sessionId, "respond");
-    const agent = await generateAgentReply({
-      transcript: stt.transcript,
+    const agent = await providers.conversationModel.respond({
+      currentTurn: acceptedTranscript,
       detectedLanguage: stt.detectedLanguage,
-      recentTurns,
+      permittedHistory: recentTurns,
       idempotencyKey: turnRecord.idempotencyKey,
-    });
-    replyText = agent.replyText;
-    replyLanguage = agent.replyLanguage;
-    pushMediaSessionEvent(sessionId, "speech_turn_agent_done", {
-      replyLength: replyText.length,
+      signal,
+      onProviderAttempt: () => {
+        const budget = consumeProviderOperation(sessionId, "respond");
+        updateTurnRecord(sessionId, turnNumber, (record) => {
+          record.cost.reservedCostUsd = budget.reservedCostUsd;
+        });
+      },
     });
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "responded";
-      record.response.displayText = replyText;
-      record.response.ttsText = replyText;
-      record.response.replyLanguage = replyLanguage;
+      record.response.displayText = agent.displayText;
+      record.response.ttsText = agent.ttsText;
+      record.response.replyLanguage = agent.replyLanguage;
       record.providers.push(agent.identity);
+      record.route.conversationModel = agent.identity;
+      record.timing.respondedAt = new Date().toISOString();
       if (agent.usage) record.usage.push(agent.usage);
     });
-  } catch (err) {
-    const errorClass = err instanceof Error ? err.name : "unknown";
-    console.error("[speech-turn] agent error", { sessionId, turnNumber, errorClass });
-    pushMediaSessionEvent(sessionId, "speech_turn_agent_failed", { errorClass });
-    updateTurnRecord(sessionId, turnNumber, (record) => {
-      record.state = "failed";
-      record.failureCode = errorClass;
+
+    const result = appendMediaResult(sessionId, {
+      turnNumber,
+      transcript: acceptedTranscript,
+      detectedLanguage: stt.detectedLanguage,
+      replyText: agent.displayText,
+      replyLanguage: agent.replyLanguage,
     });
-    updateMediaSession(sessionId, { status: "connected" });
-    return NextResponse.json(
-      { ok: false, error: "agent_failed", message: "Conversation service failed" },
-      { status: 502 }
-    );
-  }
+    appendMediaTurn(sessionId, {
+      role: "assistant",
+      text: agent.displayText,
+      language: agent.replyLanguage,
+      turnNumber,
+      turnId: turnRecord.turnId,
+    });
+    updateMediaSession(sessionId, { latestResult: result, status: "speaking" });
 
-  // ── 3. Persist result + assistant turn ────────────────────────────────────
-  const result = appendMediaResult(sessionId, {
-    turnNumber,
-    transcript: stt.transcript,
-    detectedLanguage: stt.detectedLanguage,
-    replyText,
-    replyLanguage,
-  });
-
-  appendMediaTurn(sessionId, {
-    role: "assistant",
-    text: replyText,
-    language: replyLanguage,
-    turnNumber,
-    turnId: turnRecord.turnId,
-  });
-
-  updateMediaSession(sessionId, { latestResult: result, status: "speaking" });
-
-  // ── 4. TTS ─────────────────────────────────────────────────────────────────
-  try {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "synthesizing";
+      record.timing.synthesisStartedAt = new Date().toISOString();
     });
-    consumeProviderOperation(sessionId, "synthesize");
-    const tts = await synthesizeSpeechBuffer({
-      text: replyText,
-      languageCode: replyLanguage,
+    const synthesisBudget = consumeProviderOperation(sessionId, "synthesize");
+    const tts = await providers.synthesizer.synthesize({
+      text: agent.ttsText,
+      languageCode: agent.replyLanguage,
+      signal,
     });
-
     const storedTts = appendStoredTtsAudio(sessionId, {
       turnNumber,
       contentType: tts.contentType,
-      audioBase64: tts.buffer.toString("base64"),
+      audioBase64: tts.audio.toString("base64"),
     });
-
-    // HTTP fallback delivery always prepared
     prepareOutboundDelivery(sessionId);
-
-    // Block mic listening while AI speaks (echo prevention)
     setSessionListening(sessionId, false);
-
     updateMediaSession(sessionId, {
       latestTts: {
-        turnNumber: storedTts.turnNumber,
+        turnNumber,
         contentType: storedTts.contentType,
         createdAt: storedTts.createdAt,
       },
       outboundAudio: {
         ready: true,
-        turnNumber: storedTts.turnNumber,
+        turnNumber,
         contentType: storedTts.contentType,
         createdAt: storedTts.createdAt,
       },
     });
-
-    pushMediaSessionEvent(sessionId, "speech_turn_tts_done", {
-      turnNumber,
-      bytes: tts.buffer.length,
-    });
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "completed";
       record.providers.push(tts.identity);
-      record.usage.push(tts.usage);
+      record.route.synthesizer = tts.identity;
+      if (tts.usage) record.usage.push(tts.usage);
+      record.cost.reservedCostUsd = synthesisBudget.reservedCostUsd;
+      record.cost.reportedCostUsd = record.usage.some(
+        (usage) => typeof usage.estimatedCostUsd === "number"
+      )
+        ? Number(record.usage.reduce(
+            (sum, usage) => sum + (usage.estimatedCostUsd ?? 0),
+            0
+          ).toFixed(6))
+        : null;
+      record.timing.completedAt = new Date().toISOString();
     });
 
-    // ── 5. WebRTC audio delivery (async — don't block HTTP response) ──────
     const rtcSender = getOutboundSender(sessionId);
     if (rtcSender) {
-      audioBufferToOpusFrames(tts.buffer)
+      audioBufferToOpusFrames(tts.audio)
         .then((frames) => scheduleOutboundAudio(sessionId, frames))
         .then(() => {
-          // Re-open listening gate after WebRTC playback finishes
+          if (isSessionWorkCancelled(sessionId)) return;
           setSessionListening(sessionId, true);
           updateMediaSession(sessionId, { status: "connected" });
-          console.log("[speech-turn] WebRTC playback finished", { sessionId, turnNumber });
         })
-        .catch((err) => {
-          console.warn("[speech-turn] WebRTC delivery failed", { sessionId, err: String(err) });
+        .catch((error) => {
+          if (isSessionWorkCancelled(sessionId)) return;
+          console.warn("[speech-turn] WebRTC delivery failed", {
+            sessionId,
+            errorClass: error instanceof Error ? error.name : "unknown",
+          });
           setSessionListening(sessionId, true);
           updateMediaSession(sessionId, { status: "connected" });
         });
     } else {
-      // No WebRTC sender — HTTP fallback only; re-open gate after timeout
-      setTimeout(() => {
+      scheduleSessionTimer(sessionId, () => {
         setSessionListening(sessionId, true);
         updateMediaSession(sessionId, { status: "connected" });
       }, 8000);
     }
 
-  } catch (err) {
-    const errorClass = err instanceof Error ? err.name : "unknown";
-    console.error("[speech-turn] TTS error", { sessionId, turnNumber, errorClass });
-    pushMediaSessionEvent(sessionId, "speech_turn_tts_failed", { errorClass });
-    updateTurnRecord(sessionId, turnNumber, (record) => {
-      record.state = "completed";
-      record.failureCode = `tts:${errorClass}`;
+    return NextResponse.json(
+      {
+        ok: true,
+        transcript: acceptedTranscript,
+        replyText: agent.displayText,
+        replyLanguage: agent.replyLanguage,
+        turnNumber,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    const errorClass = error instanceof Error ? error.name : "unknown";
+    console.error("[speech-turn] processing failed", {
+      sessionId,
+      turnNumber,
+      errorClass,
     });
-    setSessionListening(sessionId, true);
-    updateMediaSession(sessionId, { status: "connected" });
+    if (!isSessionWorkCancelled(sessionId)) {
+      pushMediaSessionEvent(sessionId, "speech_turn_failed", { errorClass });
+      updateTurnRecord(sessionId, turnNumber, (record) => {
+        record.state = "failed";
+        record.failureCode = errorClass;
+      });
+      setSessionListening(sessionId, true);
+      updateMediaSession(sessionId, { status: "connected" });
+    }
+    const budgetExceeded = errorClass === "ProviderBudgetExceeded";
+    return NextResponse.json(
+      {
+        ok: false,
+        error: budgetExceeded ? "provider_budget_exceeded" : "provider_failed",
+        message: budgetExceeded
+          ? "Session provider budget exceeded"
+          : "Speech processing service failed",
+      },
+      {
+        status: budgetExceeded ? 429 : 502,
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
+  } finally {
+    releaseLease();
   }
-
-  // Return immediately so the client shows the transcript + reply without
-  // waiting for audio delivery to finish.
-  return NextResponse.json({
-    ok: true,
-    transcript: stt.transcript,
-    replyText,
-    replyLanguage,
-    turnNumber,
-  });
 }

@@ -14,10 +14,17 @@ import {
   clientAddress,
   consumeRequestBudget,
 } from "@/lib/security/requestLimits";
+import { isF001Enabled } from "@/lib/config/featureFlags";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  if (!isF001Enabled()) {
+    return NextResponse.json(
+      { error: "feature_disabled", message: "Voice sessions are disabled" },
+      { status: 503, headers: { "Cache-Control": "no-store" } }
+    );
+  }
   const budget = consumeRequestBudget({
     key: `session-create:${clientAddress(req)}`,
     limit: LIMITS.maxSessionCreationsPerMinute,
@@ -40,12 +47,12 @@ export async function POST(req: Request) {
   updateMediaSession(session.id, { status: "signaling" });
   console.log("[media-service/session] created", {
     sessionId: session.id,
-    sessionToken,
     createdAt: session.createdAt,
   });
 
   return NextResponse.json({
     sessionId: session.id,
+    sessionToken,
     status: "signaling",
     conversationState: "connecting",
     createdAt: session.createdAt,

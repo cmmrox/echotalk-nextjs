@@ -11,4 +11,5 @@ export const LIMITS = {
   maxRequestsPerMinute: 180,
   maxSessionCreationsPerMinute: 20,
   maxProviderOperationsPerSession: 60,
+  maxEstimatedCostUsdPerSession: 0.5,
 } as const;

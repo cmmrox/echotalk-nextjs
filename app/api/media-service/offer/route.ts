@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { mediaAcceptOffer } from "@/media-service/peerManager";
 import { getMediaSession, pushMediaSessionEvent } from "@/media-service/sessionManager";
 import {
-  guardContentLength,
   guardMediaSessionRequest,
+  readBoundedJson,
 } from "@/lib/http/mediaSessionGuard";
 import { LIMITS } from "@/lib/limits";
 
@@ -18,9 +18,12 @@ type OfferRequest = {
 
 export async function POST(req: Request) {
   try {
-    const oversized = guardContentLength(req, LIMITS.maxSdpChars + 4096);
-    if (oversized) return oversized;
-    const body = (await req.json().catch(() => null)) as OfferRequest | null;
+    const parsed = await readBoundedJson<OfferRequest>(
+      req,
+      LIMITS.maxSdpChars + 4096
+    );
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const sessionId = body?.sessionId?.trim() ?? "";
     const sdp = body?.sdp?.trim() ?? "";
     const type = body?.type?.trim() ?? "offer";

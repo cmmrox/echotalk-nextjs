@@ -5,8 +5,9 @@ import {
   PROVIDER_CONTRACT_VERSION,
   ProviderFailure,
 } from "../../../../lib/contracts/providers.ts";
+import { ProviderRegistry } from "../../../../lib/contracts/providerRegistry.ts";
 
-test("orchestration-facing fake can implement the recognizer contract shape", async () => {
+test("orchestration can replace its provider bundle with fakes", async () => {
   const fakeRecognizer = {
     capabilities: {
       streaming: false,
@@ -43,9 +44,38 @@ test("orchestration-facing fake can implement the recognizer contract shape", as
     },
   };
 
-  const result = await fakeRecognizer.recognize();
+  const production = { recognizer: { async recognize() { throw new Error("not used"); } } };
+  const fakeBundle = { recognizer: fakeRecognizer };
+  const registry = new ProviderRegistry(production);
+  const previous = registry.replace(fakeBundle);
+  const orchestrationConsumer = async (providers) => providers.recognizer.recognize();
+  const result = await orchestrationConsumer(registry.get());
   assert.equal(result.transcript, "synthetic");
   assert.equal(result.identity.contractVersion, "f001-s01-v1");
+  assert.equal(previous, production);
+});
+
+test("transcript policy explicitly selects accepted text without mutating raw text", () => {
+  const recognition = {
+    transcript: "raw synthetic",
+    detectedLanguage: "en-US",
+    segments: [],
+  };
+  const policy = {
+    version: "test-policy-v1",
+    apply: (result) => ({
+      raw: result.transcript,
+      verbatim: result.transcript,
+      corrected: "corrected synthetic",
+      normalized: null,
+      detectedLanguage: result.detectedLanguage,
+      segments: result.segments,
+    }),
+  };
+  const forms = policy.apply(recognition);
+  const accepted = forms.corrected ?? forms.normalized ?? forms.verbatim;
+  assert.equal(forms.raw, "raw synthetic");
+  assert.equal(accepted, "corrected synthetic");
 });
 
 test("normalized provider failures expose bounded classification", () => {

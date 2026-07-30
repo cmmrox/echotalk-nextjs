@@ -26,6 +26,8 @@ export async function generateAgentReply(params: {
   detectedLanguage?: string;
   recentTurns?: ConversationTurn[];
   idempotencyKey?: string;
+  signal?: AbortSignal;
+  beforeProviderAttempt?: () => void;
 }): Promise<AgentReply> {
   const transcript = params.transcript.trim();
   const detectedLanguage = params.detectedLanguage?.trim() ?? "";
@@ -57,13 +59,23 @@ export async function generateAgentReply(params: {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (params.signal?.aborted) {
+      throw params.signal.reason ?? new DOMException("Cancelled", "AbortError");
+    }
     if (attempt > 0) {
       const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
       console.warn(`[agent] retrying after ${delayMs}ms (attempt ${attempt + 1})`);
-      await new Promise((r) => setTimeout(r, delayMs));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delayMs);
+        params.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(params.signal?.reason ?? new DOMException("Cancelled", "AbortError"));
+        }, { once: true });
+      });
     }
 
     try {
+      params.beforeProviderAttempt?.();
       const response = await client.responses.create(
         {
           model,
@@ -71,8 +83,8 @@ export async function generateAgentReply(params: {
           max_output_tokens: 250,
         },
         params.idempotencyKey
-          ? { idempotencyKey: params.idempotencyKey }
-          : undefined
+          ? { idempotencyKey: params.idempotencyKey, signal: params.signal }
+          : { signal: params.signal }
       );
 
       let replyText = (response.output_text ?? "").trim();

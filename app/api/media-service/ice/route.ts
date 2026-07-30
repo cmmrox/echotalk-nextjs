@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { mediaAddIce } from "@/media-service/peerManager";
 import { getMediaSession, pushMediaSessionEvent } from "@/media-service/sessionManager";
 import {
-  guardContentLength,
   guardMediaSessionRequest,
+  readBoundedJson,
 } from "@/lib/http/mediaSessionGuard";
 import { LIMITS } from "@/lib/limits";
 
@@ -19,9 +19,9 @@ type IceRequest = {
 
 export async function POST(req: Request) {
   try {
-    const oversized = guardContentLength(req);
-    if (oversized) return oversized;
-    const body = (await req.json().catch(() => null)) as IceRequest | null;
+    const parsed = await readBoundedJson<IceRequest>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const sessionId = body?.sessionId?.trim() ?? "";
     const candidate = body?.candidate?.trim() ?? "";
     const rejected = guardMediaSessionRequest(req, sessionId);

@@ -8,6 +8,12 @@ import {
   updateMediaSession,
 } from "@/media-service/sessionManager";
 import { updateTurnRecord } from "@/media-service/turnRecords";
+import { removeTurnAudio } from "@/media-service/turnAudioStore";
+import {
+  getSessionAbortSignal,
+  isSessionWorkCancelled,
+  tryAcquireTurnLease,
+} from "@/media-service/sessionWork";
 
 type ProcessingState = {
   queued: boolean;
@@ -93,7 +99,20 @@ function scheduleTurn(sessionId: string, turnNumber: number) {
     pushMediaSessionEvent(sessionId, "processing_started", { turnNumber });
 
     try {
-      const outcome = await runProcessingPipeline({ sessionId, turnNumber });
+      const releaseLease = tryAcquireTurnLease(sessionId);
+      if (!releaseLease) {
+        throw new DOMException("Session turn already active", "AbortError");
+      }
+      let outcome: Awaited<ReturnType<typeof runProcessingPipeline>>;
+      try {
+        outcome = await runProcessingPipeline({
+          sessionId,
+          turnNumber,
+          signal: getSessionAbortSignal(sessionId),
+        });
+      } finally {
+        releaseLease();
+      }
       current.lastProcessedAt = new Date().toISOString();
       current.processedTurns += 1;
       current.completedTurnNumbers.push(turnNumber);
@@ -120,11 +139,14 @@ function scheduleTurn(sessionId: string, turnNumber: number) {
       const message = error instanceof Error ? error.message : "Unknown error";
       current.lastProcessedAt = new Date().toISOString();
       current.completedTurnNumbers.push(turnNumber);
-      updateTurnRecord(sessionId, turnNumber, (record) => {
-        record.state = "failed";
-        record.failureCode =
-          error instanceof Error ? error.name : "unknown_failure";
-      });
+      removeTurnAudio(sessionId, turnNumber);
+      if (!isSessionWorkCancelled(sessionId)) {
+        updateTurnRecord(sessionId, turnNumber, (record) => {
+          record.state = "failed";
+          record.failureCode =
+            error instanceof Error ? error.name : "unknown_failure";
+        });
+      }
       updateMediaSession(sessionId, { status: "connected" });
       pushMediaSessionEvent(sessionId, "processing_failed", {
         turnNumber,
@@ -140,6 +162,7 @@ function scheduleTurn(sessionId: string, turnNumber: number) {
       current.processing = false;
       current.activeTurnNumber = undefined;
       updateMediaSession(sessionId, { processing: { ...current } });
+      if (isSessionWorkCancelled(sessionId)) return;
       const nextTurn = current.pendingTurnNumbers.shift();
       if (nextTurn !== undefined) {
         pushMediaSessionEvent(sessionId, "processing_deferred_turn_start", {

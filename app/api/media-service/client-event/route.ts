@@ -5,8 +5,8 @@
  */
 import { NextResponse } from "next/server";
 import {
-  guardContentLength,
   guardMediaSessionRequest,
+  readBoundedJson,
 } from "@/lib/http/mediaSessionGuard";
 import { LIMITS } from "@/lib/limits";
 import { pushMediaSessionEvent } from "@/media-service/sessionManager";
@@ -15,9 +15,9 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const oversized = guardContentLength(req);
-    if (oversized) return oversized;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const parsed = await readBoundedJson<Record<string, unknown>>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const sessionId =
       typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
     const rejected = guardMediaSessionRequest(req, sessionId);

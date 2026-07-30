@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { generateAgentReply } from "@/lib/services/agent";
 import { getWebRtcSession } from "@/lib/webrtc/sessionRegistry";
 import { guardInternalProviderRequest } from "@/lib/http/internalApiGuard";
-import { guardContentLength } from "@/lib/http/mediaSessionGuard";
+import { readBoundedJson } from "@/lib/http/mediaSessionGuard";
 
 export const runtime = "nodejs";
 
@@ -17,9 +17,9 @@ export async function POST(req: Request) {
   try {
     const rejected = guardInternalProviderRequest(req);
     if (rejected) return rejected;
-    const oversized = guardContentLength(req);
-    if (oversized) return oversized;
-    const body = (await req.json().catch(() => null)) as AgentRequest | null;
+    const parsed = await readBoundedJson<AgentRequest>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
     const transcript = body?.transcript?.trim() ?? "";
     const detectedLanguage = body?.detectedLanguage?.trim() ?? "";
     const sessionId = body?.sessionId?.trim() ?? "";

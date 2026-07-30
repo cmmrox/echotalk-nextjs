@@ -17,6 +17,89 @@ export function guardContentLength(request: Request, maxBytes = LIMITS.maxJsonBy
   return null;
 }
 
+export async function readBoundedJson<T>(
+  request: Request,
+  maxBytes = LIMITS.maxJsonBytes
+): Promise<
+  | { ok: true; value: T | null }
+  | { ok: false; response: NextResponse }
+> {
+  const oversized = guardContentLength(request, maxBytes);
+  if (oversized) return { ok: false, response: oversized };
+  if (!request.body) return { ok: true, value: null };
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel("payload limit exceeded").catch(() => undefined);
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "payload_too_large", message: "Request payload exceeds limit" },
+          { status: 413 }
+        ),
+      };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    const text = new TextDecoder().decode(bytes);
+    return { ok: true, value: text ? JSON.parse(text) as T : null };
+  } catch {
+    return { ok: true, value: null };
+  }
+}
+
+export async function readBoundedBytes(
+  request: Request,
+  maxBytes: number
+): Promise<
+  | { ok: true; value: Buffer }
+  | { ok: false; response: NextResponse }
+> {
+  const oversized = guardContentLength(request, maxBytes);
+  if (oversized) return { ok: false, response: oversized };
+  if (!request.body) return { ok: true, value: Buffer.alloc(0) };
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel("payload limit exceeded").catch(() => undefined);
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "payload_too_large", message: "Request payload exceeds limit" },
+          { status: 413 }
+        ),
+      };
+    }
+    chunks.push(value);
+  }
+
+  return {
+    ok: true,
+    value: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total),
+  };
+}
+
 export function guardMediaSessionRequest(
   request: Request,
   sessionId: string

@@ -14,8 +14,10 @@ import { removeTurnRecords } from "@/media-service/turnRecords";
 import { removeTurnState } from "@/media-service/turnState";
 import { revokeSessionToken } from "@/lib/security/sessionAuthorization";
 import { removeProviderBudget } from "@/lib/security/providerBudget";
+import { cancelSessionWork } from "@/media-service/sessionWork";
 
 export function cleanupMediaSession(sessionId: string) {
+  cancelSessionWork(sessionId);
   clearMediaPeerEphemera(sessionId);
   removeListeningState(sessionId);
   removeInterruptionState(sessionId);

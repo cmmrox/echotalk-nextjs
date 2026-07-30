@@ -20,10 +20,9 @@ import {
   updateTurnRecord,
 } from "@/media-service/turnRecords";
 import { setSessionListening } from "@/media-service/listeningState";
-import { generateAgentReply } from "@/lib/services/agent";
-import { transcribeAudioBuffer } from "@/lib/services/stt";
-import { synthesizeSpeechBuffer } from "@/lib/services/tts";
 import { consumeProviderOperation } from "@/lib/security/providerBudget";
+import { getProviderBundle } from "@/lib/services/providerBundle";
+import { scheduleSessionTimer } from "@/media-service/sessionWork";
 
 export type PipelineOutcome = {
   turnNumber: number;
@@ -69,11 +68,15 @@ export function buildPipelineSessionPatch(outcome: PipelineOutcome) {
 export async function runProcessingPipeline(params: {
   sessionId: string;
   turnNumber: number;
+  signal?: AbortSignal;
 }): Promise<PipelineOutcome> {
-  const { sessionId, turnNumber } = params;
+  const { sessionId, turnNumber, signal } = params;
+  const providers = getProviderBundle();
   const turnRecord = createTurnRecord(sessionId, turnNumber);
   updateTurnRecord(sessionId, turnNumber, (record) => {
     record.state = "recognizing";
+    record.timing.recognitionStartedAt = new Date().toISOString();
+    record.route.transcriptPolicyVersion = providers.transcriptPolicy.version;
   });
 
   const storedAudio = getTurnAudio(sessionId, turnNumber);
@@ -101,6 +104,7 @@ export async function runProcessingPipeline(params: {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "no_speech";
       record.failureCode = "unsupported_opus_mode";
+      record.timing.completedAt = new Date().toISOString();
     });
     removeTurnAudio(sessionId, turnNumber);
     return {
@@ -125,6 +129,7 @@ export async function runProcessingPipeline(params: {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "no_speech";
       record.failureCode = "no_usable_speech";
+      record.timing.completedAt = new Date().toISOString();
     });
     removeTurnAudio(sessionId, turnNumber);
     return {
@@ -151,31 +156,40 @@ export async function runProcessingPipeline(params: {
   });
   markTurnMetric(sessionId, turnNumber, { sttStartedAt: new Date().toISOString() });
 
-  consumeProviderOperation(sessionId, "recognize");
-  const stt = await transcribeAudioBuffer({
-    buffer,
+  const recognitionBudget = consumeProviderOperation(sessionId, "recognize");
+  const stt = await providers.recognizer.recognize({
+    audio: buffer,
     inputMimeType: mimeType,
+    signal,
   });
+  const transcriptForms = providers.transcriptPolicy.apply(stt);
+  const acceptedTranscript =
+    transcriptForms.corrected ??
+    transcriptForms.normalized ??
+    transcriptForms.verbatim;
 
   pushMediaSessionEvent(sessionId, "processing_stt_completed", {
     turnNumber,
-    transcriptLength: stt.transcript.length,
+    transcriptLength: acceptedTranscript.length,
     detectedLanguage: stt.detectedLanguage,
   });
   markTurnMetric(sessionId, turnNumber, { sttCompletedAt: new Date().toISOString() });
   updateTurnRecord(sessionId, turnNumber, (record) => {
-    record.state = stt.transcript.trim() ? "recognized" : "no_speech";
-    record.transcript.raw = stt.transcript;
-    record.transcript.verbatim = stt.transcript;
-    record.transcript.detectedLanguage = stt.detectedLanguage;
-    record.transcript.segments = stt.segments;
+    record.state = acceptedTranscript.trim() ? "recognized" : "no_speech";
+    record.transcript = transcriptForms;
     record.providers.push(stt.identity);
+    record.route.recognizer = stt.identity;
+    record.quality.recognitionConfidence = stt.confidence;
+    record.quality.segmentCount = stt.segments.length;
+    record.quality.hasUsableSpeech = Boolean(acceptedTranscript.trim());
+    record.timing.recognizedAt = new Date().toISOString();
+    record.cost.reservedCostUsd = recognitionBudget.reservedCostUsd;
   });
 
   let agentReplyText = "";
   let agentReplyLanguage = stt.detectedLanguage || "en-US";
 
-  if (stt.transcript.trim()) {
+  if (acceptedTranscript.trim()) {
     // Capture permitted history before recording the current turn. The model
     // service adds currentTurn exactly once after this chronological history.
     const recentTurns = (getMediaSession(sessionId)?.turns ?? []).map((turn) => ({
@@ -185,7 +199,7 @@ export async function runProcessingPipeline(params: {
     }));
     appendMediaTurn(sessionId, {
       role: "user",
-      text: stt.transcript,
+      text: acceptedTranscript,
       language: stt.detectedLanguage,
       turnNumber,
       turnId: turnRecord.turnId,
@@ -193,43 +207,52 @@ export async function runProcessingPipeline(params: {
 
     pushMediaSessionEvent(sessionId, "processing_agent_started", {
       turnNumber,
-      transcriptLength: stt.transcript.length,
+      transcriptLength: acceptedTranscript.length,
       recentTurnCount: recentTurns.length,
     });
     markTurnMetric(sessionId, turnNumber, { agentStartedAt: new Date().toISOString() });
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "responding";
+      record.timing.responseStartedAt = new Date().toISOString();
     });
 
-    consumeProviderOperation(sessionId, "respond");
-    const agent = await generateAgentReply({
-      transcript: stt.transcript,
+    const agent = await providers.conversationModel.respond({
+      currentTurn: acceptedTranscript,
       detectedLanguage: stt.detectedLanguage,
-      recentTurns,
+      permittedHistory: recentTurns,
       idempotencyKey: turnRecord.idempotencyKey,
+      signal,
+      onProviderAttempt: () => {
+        const budget = consumeProviderOperation(sessionId, "respond");
+        updateTurnRecord(sessionId, turnNumber, (record) => {
+          record.cost.reservedCostUsd = budget.reservedCostUsd;
+        });
+      },
     });
-    agentReplyText = agent.replyText;
+    agentReplyText = agent.displayText;
     agentReplyLanguage = agent.replyLanguage;
 
     pushMediaSessionEvent(sessionId, "processing_agent_completed", {
       turnNumber,
-      replyLength: agent.replyText.length,
+      replyLength: agent.displayText.length,
       replyLanguage: agent.replyLanguage,
     });
     markTurnMetric(sessionId, turnNumber, { agentCompletedAt: new Date().toISOString() });
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "responded";
-      record.response.displayText = agent.replyText;
-      record.response.ttsText = agent.replyText;
+      record.response.displayText = agent.displayText;
+      record.response.ttsText = agent.ttsText;
       record.response.replyLanguage = agent.replyLanguage;
       record.providers.push(agent.identity);
+      record.route.conversationModel = agent.identity;
+      record.timing.respondedAt = new Date().toISOString();
       if (agent.usage) record.usage.push(agent.usage);
     });
   }
 
   const result = appendMediaResult(sessionId, {
     turnNumber,
-    transcript: stt.transcript,
+    transcript: acceptedTranscript,
     detectedLanguage: stt.detectedLanguage,
     replyText: agentReplyText,
     replyLanguage: agentReplyLanguage,
@@ -262,7 +285,7 @@ export async function runProcessingPipeline(params: {
       }
     | undefined;
 
-  if (result.replyText.trim() && stt.transcript.trim()) {
+  if (result.replyText.trim() && acceptedTranscript.trim()) {
     pushMediaSessionEvent(sessionId, "processing_tts_started", {
       turnNumber,
       replyLength: result.replyText.length,
@@ -271,12 +294,14 @@ export async function runProcessingPipeline(params: {
     markTurnMetric(sessionId, turnNumber, { ttsStartedAt: new Date().toISOString() });
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "synthesizing";
+      record.timing.synthesisStartedAt = new Date().toISOString();
     });
 
-    consumeProviderOperation(sessionId, "synthesize");
-    const tts = await synthesizeSpeechBuffer({
+    const synthesisBudget = consumeProviderOperation(sessionId, "synthesize");
+    const tts = await providers.synthesizer.synthesize({
       text: result.replyText,
       languageCode: result.replyLanguage,
+      signal,
     });
 
     clearOutboundDelivery(sessionId);
@@ -284,7 +309,7 @@ export async function runProcessingPipeline(params: {
     const storedTts = appendStoredTtsAudio(sessionId, {
       turnNumber,
       contentType: tts.contentType,
-      audioBase64: tts.buffer.toString("base64"),
+      audioBase64: tts.audio.toString("base64"),
     });
     latestTts = {
       turnNumber: storedTts.turnNumber,
@@ -297,11 +322,11 @@ export async function runProcessingPipeline(params: {
 
     if (rtcSender) {
       try {
-        const opusFrames = await audioBufferToOpusFrames(tts.buffer);
+        const opusFrames = await audioBufferToOpusFrames(tts.audio);
         scheduleOutboundAudio(sessionId, opusFrames).catch((err) => {
           console.warn("[media-service/pipeline] WebRTC audio error", {
             sessionId,
-            err: String(err),
+            errorClass: err instanceof Error ? err.name : "unknown",
           });
         });
         rtcDelivered = true;
@@ -312,7 +337,7 @@ export async function runProcessingPipeline(params: {
       } catch (rtcErr) {
         console.warn("[media-service/pipeline] WebRTC audio conversion failed, using HTTP", {
           sessionId,
-          err: String(rtcErr),
+          errorClass: rtcErr instanceof Error ? rtcErr.name : "unknown",
         });
       }
     }
@@ -324,7 +349,7 @@ export async function runProcessingPipeline(params: {
       playbackMode: rtcDelivered ? "rtc" : "http",
     });
 
-    setTimeout(() => {
+    scheduleSessionTimer(sessionId, () => {
       setSessionListening(sessionId, true);
       pushMediaSessionEvent(sessionId, "listening_gate_reopened_timeout", {
         turnNumber,
@@ -347,7 +372,7 @@ export async function runProcessingPipeline(params: {
     pushMediaSessionEvent(sessionId, "processing_tts_completed", {
       turnNumber,
       contentType: tts.contentType,
-      bytes: tts.buffer.length,
+      bytes: tts.audio.length,
       rtcDelivered,
       playbackMode: rtcDelivered ? "rtc" : "http",
     });
@@ -358,11 +383,23 @@ export async function runProcessingPipeline(params: {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "completed";
       record.providers.push(tts.identity);
-      record.usage.push(tts.usage);
+      record.route.synthesizer = tts.identity;
+      if (tts.usage) record.usage.push(tts.usage);
+      record.cost.reservedCostUsd = synthesisBudget.reservedCostUsd;
+      record.cost.reportedCostUsd = record.usage.some(
+        (usage) => typeof usage.estimatedCostUsd === "number"
+      )
+        ? Number(record.usage.reduce(
+            (sum, usage) => sum + (usage.estimatedCostUsd ?? 0),
+            0
+          ).toFixed(6))
+        : null;
+      record.timing.completedAt = new Date().toISOString();
     });
-  } else if (stt.transcript.trim()) {
+  } else if (acceptedTranscript.trim()) {
     updateTurnRecord(sessionId, turnNumber, (record) => {
       record.state = "completed";
+      record.timing.completedAt = new Date().toISOString();
     });
   }
 

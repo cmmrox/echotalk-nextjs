@@ -31,6 +31,31 @@ export type TurnRecord = TurnIdentifiers & {
   };
   providers: ProviderIdentity[];
   usage: ProviderUsage[];
+  route: {
+    recognizer?: ProviderIdentity;
+    conversationModel?: ProviderIdentity;
+    synthesizer?: ProviderIdentity;
+    transcriptPolicyVersion: string;
+  };
+  quality: {
+    recognitionConfidence: number | null;
+    segmentCount: number;
+    hasUsableSpeech: boolean;
+  };
+  timing: {
+    recognitionStartedAt?: string;
+    recognizedAt?: string;
+    responseStartedAt?: string;
+    respondedAt?: string;
+    synthesisStartedAt?: string;
+    completedAt?: string;
+  };
+  cost: {
+    currency: "USD";
+    basis: "conservative-reservation";
+    reservedCostUsd: number;
+    reportedCostUsd: number | null;
+  };
   failureCode?: string;
 };
 
@@ -69,6 +94,19 @@ export function createTurnRecord(sessionId: string, turnNumber: number) {
     response: { displayText: "", ttsText: "" },
     providers: [],
     usage: [],
+    route: { transcriptPolicyVersion: "unassigned" },
+    quality: {
+      recognitionConfidence: null,
+      segmentCount: 0,
+      hasUsableSpeech: false,
+    },
+    timing: {},
+    cost: {
+      currency: "USD",
+      basis: "conservative-reservation",
+      reservedCostUsd: 0,
+      reportedCostUsd: null,
+    },
   };
   byTurn.set(turnNumber, created);
   getStore().bySession.set(sessionId, byTurn);
