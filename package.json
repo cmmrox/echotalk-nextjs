@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "agents:generate": "node .agents/skills/echotalk-development/scripts/generate-agent-adapters.mjs",
+    "agents:validate": "node .agents/skills/echotalk-development/scripts/validate-agent-workspace.mjs"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

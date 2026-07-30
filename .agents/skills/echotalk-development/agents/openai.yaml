@@ -1,0 +1,4 @@
+interface:
+  display_name: "EchoTalk Development"
+  short_description: "Production delivery rules for bilingual EchoTalk"
+  default_prompt: "Use $echotalk-development to plan and deliver a production-ready EchoTalk task."

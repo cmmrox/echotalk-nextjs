@@ -1,0 +1,32 @@
+# UAT Record — <stage/candidate>
+
+- Candidate commit/artifact:
+- Environment:
+- UAT coordinator:
+- Human client:
+- Client authority/stakeholder record:
+- Test period:
+
+## Scenarios
+
+| Scenario | Expected outcome | Sinhala/English coverage | Result | Evidence/issue |
+|---|---|---|---|---|
+
+## Conditions and open issues
+
+| Condition/issue | Owner | Due date | Production impact |
+|---|---|---|---|
+
+## Human client decision
+
+Select one: `accepted` / `accepted-with-conditions` / `rejected`
+
+- Decision:
+- Production release authorized: yes / no
+- Client comments:
+- Client name:
+- Date:
+- Recorded evidence:
+
+> An agent must leave this section pending until the human client explicitly
+> provides the decision. The UAT coordinator cannot sign for the client.
