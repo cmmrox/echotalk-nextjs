@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "feature": "F001",
+  "stage": "S01",
+  "candidate_sha": "e7ca7efbe51e06a393348553cb3084751b244b9d",
+  "harness_sha": "7f6cb9400b06443d857e70c62b91f78172f4e847",
+  "manifest": "qa-automation/features/F001-sinhala-english-production-voice/stages/S01.json",
+  "manifest_sha256": "a97c501c0ad58e525f688d6632e597d71225bda78eaa73eade3bd76cde82c986",
+  "environment": {
+    "node": "v24.12.0",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "started_at": "2026-07-30T12:39:45.862Z",
+  "finished_at": "2026-07-30T12:39:47.565Z",
+  "working_tree_clean": true,
+  "certifying_run": true,
+  "qa_owner": "/root/s01_independent_qa",
+  "result": "passed",
+  "checks": [
+    {
+      "case": "TC-F001-001",
+      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/recognition-assembly.test.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 80,
+      "output_sha256": "9516eb5ed1c0d59e096a4baf34795753ba7769499e114da9ab15753a4ff436bc",
+      "case_sha256": "ef10c5ea42e9db72fa03f057f010d66751e6b287fe34d78609a5c95f5db0d6a2",
+      "automation_sha256": "46133ff97336af590f19888781bd9d8b61c72cadcb7dbb2b43579f1206e5da36"
+    },
+    {
+      "case": "TC-F001-002",
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-concurrency.qa.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/delete-race.qa.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 520,
+      "output_sha256": "1e70dca59c49118585bfa83eedae0d706d0172a17268204c3138d0a9d3842427",
+      "case_sha256": "e686fbd14ea547912383cc4e2e97e8ce648d382891c2e44f0c8bec3ef02b0daf",
+      "automation_sha256": "fee641228ba1041b88e75cec9d8bc23f96852fc888354058d7de8d9900b7d5db"
+    },
+    {
+      "case": "TC-F001-003",
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-orchestration.qa.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 324,
+      "output_sha256": "0d4c60c4cd64ae0ff7c180611a1c564ee8527872657daade2495fdd9f700b0f4",
+      "case_sha256": "7a694be141d6ef549187510e488cc254c25b5357fc85ac03989fcc3e7b7c32da",
+      "automation_sha256": "cee89d8bcee707e04c509fd1599b0948c9257424f939d770022658ff026f642c"
+    },
+    {
+      "case": "TC-F001-004",
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/feature-flag.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-work.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-dynamic.qa.mjs",
+      "required": true,
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 778,
+      "output_sha256": "3b6fa4277a199c3f21ef8a0fb09d9e007b7f7e4b8d6e68620b64e949d2127963",
+      "case_sha256": "8b15a8366d3f3001b471490e091f12df0ef2eee56baa8df008750f78f1ee0ad2",
+      "automation_sha256": "9cddad6e90b06d5e418435b2f5772518c0c9ed25e1c2e858203822d86c6229af"
+    }
+  ]
+}
