@@ -8,7 +8,7 @@ and stale allocations in the checked-out integration candidate.
 |---|---|---|
 | Feature | `F000`, `F001` | `F002` |
 | Stage | `S00`, `S01`, `S02`, `S03`, `S04`, `S05`, `S06`, `S07` | `S08` |
-| Architecture decision | `ADR-0001`, `ADR-0002` | `ADR-0003` |
+| Architecture decision | `ADR-0001`, `ADR-0002`, `ADR-0003`, `ADR-0004`, `ADR-0005` | `ADR-0006` |
 
 Task IDs restart within a stage. QA case numbers restart within a feature.
 “Next provisional” is guidance, not a reservation; recheck current integration

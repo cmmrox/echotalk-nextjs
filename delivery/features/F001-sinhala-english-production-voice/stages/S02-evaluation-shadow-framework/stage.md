@@ -45,12 +45,12 @@ sealed-set isolation, redacted telemetry, pricing, and shadow disclosure.
 
 | Task | Role | Depends on | Writable paths | Status |
 |---|---|---|---|---|
-| T01 evaluation specification | business-analyst | — | evaluation specifications | planned |
-| T02 corpus/eval architecture | solution-architect | T01 | assigned ADRs/contracts | planned |
-| T03 runner and price ledger | full-stack-developer | T02 | new evaluation modules/scripts | planned |
-| T04 consented manifest | corpus-steward-human | T02 | approved manifests only | planned |
-| T05 sampled shadow telemetry | full-stack-developer | T02 | assigned shadow/telemetry files | planned |
-| T80 serialized integration | full-stack-developer | T03–T05 | shared scripts/config/contracts | planned |
+| T01 evaluation specification | business-analyst | — | evaluation specifications | in-review |
+| T02 corpus/eval architecture | solution-architect | T01 | assigned ADRs/contracts | in-review |
+| T03 runner and price ledger | full-stack-developer | T02 | new evaluation modules/scripts | ready |
+| T04 consented manifest | corpus-steward-human | T02 | approved manifests only | blocked |
+| T05 sampled shadow telemetry | full-stack-developer | T02 | assigned shadow/telemetry files | ready |
+| T80 serialized integration | full-stack-developer | T03–T05 | shared scripts/config/contracts | blocked |
 | T90 independent QA | qa-engineer | T80 | QA and gate paths only | draft |
 
 ## Security, privacy, and abuse

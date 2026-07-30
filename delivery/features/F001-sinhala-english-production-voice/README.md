@@ -8,7 +8,7 @@ feature_doc: docs/features/F001-sinhala-english-production-voice/feature.md
 
 | Stage | Outcome | Status | Candidate |
 |---|---|---|---|
-| [S01](stages/S01-secure-platform-baseline/stage.md) | Secure platform baseline | in-progress | pending |
+| [S01](stages/S01-secure-platform-baseline/stage.md) | Secure platform baseline | qa-passed | `e7ca7efbe51e06a393348553cb3084751b244b9d` |
 | [S02](stages/S02-evaluation-shadow-framework/stage.md) | Evaluation and shadow framework | proposed | pending |
 | [S03](stages/S03-sinhala-first-transcription/stage.md) | Sinhala-first transcription | proposed | pending |
 | [S04](stages/S04-bilingual-conversation-intelligence/stage.md) | Bilingual conversation intelligence | proposed | pending |
@@ -16,5 +16,5 @@ feature_doc: docs/features/F001-sinhala-english-production-voice/feature.md
 | [S06](stages/S06-realtime-ux-resilience/stage.md) | Realtime UX, accessibility, and resilience | proposed | pending |
 | [S07](stages/S07-controlled-general-availability/stage.md) | Controlled general availability | proposed | pending |
 
-Only S01 may advance to `ready` first. Later stages remain proposed until their
-declared dependencies and stage-specific human decisions are satisfied.
+S01 passed independent QA. Later stages remain proposed until their declared
+dependencies and stage-specific human decisions are satisfied.
