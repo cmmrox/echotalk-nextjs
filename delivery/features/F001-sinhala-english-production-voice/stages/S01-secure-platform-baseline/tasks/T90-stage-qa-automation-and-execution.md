@@ -9,7 +9,7 @@ owner_role: qa-engineer
 reviewer_role: project-manager
 owner: /root/s01_independent_qa
 reviewer: /root
-base_sha: b5d02e377586c0fd7311d5589c5a5fb134a51e56
+base_sha: e7ca7efbe51e06a393348553cb3084751b244b9d
 result_sha: pending
 depends_on: [T01, T02, T03, T04, T80]
 requirement_refs: [F001-R02, F001-R07, F001-R13, F001-R14, F001-R17, F001-R18, F001-R20]

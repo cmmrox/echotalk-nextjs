@@ -10,7 +10,7 @@ reviewer_role: solution-architect
 owner: /root
 reviewer: /root/s01_architecture_review
 base_sha: ef369889ccf3144b51c94741e7aa4777edc89d18
-result_sha: b5d02e377586c0fd7311d5589c5a5fb134a51e56
+result_sha: e7ca7efbe51e06a393348553cb3084751b244b9d
 depends_on: [T02, T03, T04]
 requirement_refs: [F001-R02, F001-R07, F001-R13, F001-R14, F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
@@ -58,14 +58,19 @@ Internal-only after review; text/route rollback preserves security fixes.
 - Commands run with pass/fail/blocked/skip: after the first architecture review
   rejected `ae9de7f`, the blocking token bootstrap, runtime feature flag,
   bounded-body, adapter injection, cancellation, retry-spend, provenance, and
-  fallback-serialization findings were corrected in `b5d02e3`. On that exact
-  source candidate, `npm run ci:verify` passed all six governance validators,
-  ten governance tests, typecheck, production build, and lint with three
-  pre-existing warnings; `npm run test:f001:s01:dev` passed 18 assertions.
+  fallback-serialization findings were corrected in `b5d02e3`. The second
+  review rejected that candidate for cleanup resurrection, overstated adapter
+  capabilities, session-cumulative turn cost, and legacy-route bypasses; QA
+  preparation also identified an incomplete runtime kill switch. `e7ca7ef`
+  corrects those issues. On that exact source candidate, `npm run ci:verify`
+  passed all six governance validators, ten governance tests, typecheck,
+  production build, and lint with three pre-existing warnings;
+  `npm run test:f001:s01:dev` passed 23 developer assertions.
 - Evidence: architecture `9b2eb15`, initial implementation `d8ee765`,
-  governance compatibility `4eaa609`, and corrected source candidate `b5d02e3`.
+  governance compatibility `4eaa609`, first correction `b5d02e3`, and second
+  corrected source candidate `e7ca7ef`.
 - Remaining risks: fresh architecture approval and independent T90 are pending;
   live-provider behavior, production identity, UAT, and release remain outside
   this stage decision.
-- Handoff decision and receiver: architecture reviewer reassesses `b5d02e3`;
+- Handoff decision and receiver: architecture reviewer reassesses `e7ca7ef`;
   only an approval may advance the exact candidate to independent T90.

@@ -6,7 +6,7 @@ status: in-progress
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
 depends_on: []
 final_qa_task: T90
-candidate_sha: b5d02e377586c0fd7311d5589c5a5fb134a51e56
+candidate_sha: e7ca7efbe51e06a393348553cb3084751b244b9d
 product_owner: user-client
 human_client: user-client
 release_owner: pending-human
