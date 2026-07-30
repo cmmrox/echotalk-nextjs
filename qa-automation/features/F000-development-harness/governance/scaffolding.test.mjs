@@ -17,6 +17,19 @@ function run(script, args, root) {
   });
 }
 
+function provisionalId(registry, type) {
+  const row = registry.match(new RegExp(`^\\| ${type} \\| [^|]+ \\| ([^|]+) \\|$`, "m"));
+  const id = row?.[1].match(/`([^`]+)`/)?.[1];
+  assert.ok(id, `Missing provisional ${type} ID`);
+  return id;
+}
+
+function incrementId(id) {
+  const prefix = id.match(/^[A-Z]+/)?.[0] ?? "";
+  const digits = id.slice(prefix.length);
+  return `${prefix}${String(Number(digits) + 1).padStart(digits.length, "0")}`;
+}
+
 async function normalizeF000ToPlanningState(root) {
   const stagePath = join(
     root,
@@ -54,12 +67,17 @@ test("scaffolds a valid feature, stage, and task without overwriting", async () 
     await cp(join(repoRoot, ".agents", "roles"), join(fixture, ".agents", "roles"), {
       recursive: true
     });
-    assert.equal(run(scaffold, ["feature", "F001", "sample-feature", "Sample Feature"], fixture).status, 0);
-    assert.equal(run(scaffold, ["stage", "F001", "S01", "first-release", "First Release"], fixture).status, 0);
+    const registryPath = join(fixture, "docs/governance/id-registry.md");
+    const initialRegistry = await readFile(registryPath, "utf8");
+    const featureId = provisionalId(initialRegistry, "Feature");
+    const stageId = provisionalId(initialRegistry, "Stage");
+    const secondFeatureId = incrementId(featureId);
+    assert.equal(run(scaffold, ["feature", featureId, "sample-feature", "Sample Feature"], fixture).status, 0);
+    assert.equal(run(scaffold, ["stage", featureId, stageId, "first-release", "First Release"], fixture).status, 0);
     assert.equal(
       run(
         scaffold,
-        ["task", "F001", "S01", "T01", "bounded-change", "implementation", "full-stack-developer", "solution-architect", "Bounded Change"],
+        ["task", featureId, stageId, "T01", "bounded-change", "implementation", "full-stack-developer", "solution-architect", "Bounded Change"],
         fixture
       ).status,
       0
@@ -67,14 +85,17 @@ test("scaffolds a valid feature, stage, and task without overwriting", async () 
 
     const validation = run(validator, [], fixture);
     assert.equal(validation.status, 0, validation.stderr || validation.stdout);
-    const registryPath = join(fixture, "docs/governance/id-registry.md");
     const registry = await readFile(registryPath, "utf8");
-    assert.match(registry, /\| Feature \| `F000`, `F001` \| `F002` \|/);
-    assert.match(registry, /\| Stage \| `S00`, `S01` \| `S02` \|/);
+    const featureRow = registry.split("\n").find((line) => line.startsWith("| Feature |")) ?? "";
+    const stageRow = registry.split("\n").find((line) => line.startsWith("| Stage |")) ?? "";
+    assert.ok(featureRow.includes("`" + featureId + "`"));
+    assert.ok(featureRow.includes("`" + secondFeatureId + "`"));
+    assert.ok(stageRow.includes("`" + stageId + "`"));
+    assert.ok(stageRow.includes("`" + incrementId(stageId) + "`"));
     const qaTask = await readFile(
       join(
         fixture,
-        "delivery/features/F001-sample-feature/stages/S01-first-release/tasks/T90-stage-qa-automation-and-execution.md"
+        `delivery/features/${featureId}-sample-feature/stages/${stageId}-first-release/tasks/T90-stage-qa-automation-and-execution.md`
       ),
       "utf8"
     );
@@ -82,7 +103,7 @@ test("scaffolds a valid feature, stage, and task without overwriting", async () 
 
     const duplicate = run(
       scaffold,
-      ["task", "F001", "S01", "T01", "bounded-change", "implementation", "full-stack-developer", "solution-architect"],
+      ["task", featureId, stageId, "T01", "bounded-change", "implementation", "full-stack-developer", "solution-architect"],
       fixture
     );
     assert.notEqual(duplicate.status, 0);
@@ -90,25 +111,25 @@ test("scaffolds a valid feature, stage, and task without overwriting", async () 
 
     await writeFile(
       registryPath,
-      registry.replace("`F000`, `F001`", "`F000`")
+      registry.replace(`, \`${featureId}\``, "")
     );
     const staleRegistry = run(validator, [], fixture);
     assert.notEqual(staleRegistry.status, 0);
-    assert.match(staleRegistry.stderr, /does not allocate F001 in the Allocated column/);
+    assert.match(staleRegistry.stderr, new RegExp(`does not allocate ${featureId} in the Allocated column`));
     await writeFile(registryPath, registry);
 
     const missingRoles = run(
       scaffold,
-      ["task", "F001", "S01", "T02", "missing-roles", "implementation"],
+      ["task", featureId, stageId, "T02", "missing-roles", "implementation"],
       fixture
     );
     assert.notEqual(missingRoles.status, 0);
     assert.match(missingRoles.stderr, /owner role, and reviewer role are required/);
 
-    assert.equal(run(scaffold, ["feature", "F002", "second-feature"], fixture).status, 0);
+    assert.equal(run(scaffold, ["feature", secondFeatureId, "second-feature"], fixture).status, 0);
     const globalStageCollision = run(
       scaffold,
-      ["stage", "F002", "S01", "duplicate-global-stage"],
+      ["stage", secondFeatureId, stageId, "duplicate-global-stage"],
       fixture
     );
     assert.notEqual(globalStageCollision.status, 0);

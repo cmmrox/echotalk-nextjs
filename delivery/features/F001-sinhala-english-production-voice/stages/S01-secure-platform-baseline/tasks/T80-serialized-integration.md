@@ -14,7 +14,7 @@ result_sha: pending
 depends_on: [T02, T03, T04]
 requirement_refs: [F001-R02, F001-R07, F001-R13, F001-R14, F001-R17, F001-R18, F001-R20]
 acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
-writable_paths: [".env.example", "app/**", "components/**", "lib/**", "media-service/**", "package.json", "delivery/features/F001-sinhala-english-production-voice/stages/S01-secure-platform-baseline/**"]
+writable_paths: [".env.example", "app/**", "components/**", "lib/**", "media-service/**", "package.json", "delivery/features/F001-sinhala-english-production-voice/stages/S01-secure-platform-baseline/**", "qa-automation/features/F000-development-harness/governance/scaffolding.test.mjs"]
 prohibited_paths: ["docs/product/authority-registry.json", "delivery/features/F001-sinhala-english-production-voice/stages/S02-*/**"]
 test_commands: ["npm run governance:validate", "npm run test:governance", "npm run test:f001:s01:dev", "npm run lint", "npm run typecheck", "npm run build"]
 next_owner: project-manager
@@ -53,7 +53,8 @@ Add config names only. No persistent migration.
 Internal-only after review; text/route rollback preserves security fixes.
 ## Evidence and handoff
 
-- Actual files changed: pending final integration diff.
+- Actual files changed: product/config paths from T02-T04, S01 delivery/QA
+  indexes, and the provisional-ID scaffolding regression test.
 - Commands run with pass/fail/blocked/skip: partial developer checks pass.
 - Evidence: candidate SHA pending focused commits and full verification.
 - Remaining risks: independent review and T90 are unclaimed.
