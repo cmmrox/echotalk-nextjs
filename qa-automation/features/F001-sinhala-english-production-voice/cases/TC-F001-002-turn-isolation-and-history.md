@@ -6,7 +6,7 @@ acceptance_refs: [F001-AC03, F001-AC04, F001-AC16]
 risk: concurrency
 priority: required
 automation: qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs
-command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-concurrency.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/delete-race.test.mjs
+command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-concurrency.qa.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/delete-race.qa.mjs
 ---
 
 # TC-F001-002 — Turn Isolation and Exact History

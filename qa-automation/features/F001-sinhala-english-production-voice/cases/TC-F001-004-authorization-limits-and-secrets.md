@@ -6,7 +6,7 @@ acceptance_refs: [F001-AC16, F001-AC20, F001-AC21]
 risk: security
 priority: required
 automation: qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs
-command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/feature-flag.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-work.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-dynamic.test.mjs
+command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/feature-flag.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-work.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-dynamic.qa.mjs
 ---
 
 # TC-F001-004 — Authorization Limits and Secret Boundaries

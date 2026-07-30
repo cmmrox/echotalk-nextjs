@@ -6,7 +6,7 @@ acceptance_refs: [F001-AC04, F001-AC09]
 risk: compatibility
 priority: required
 automation: qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs
-command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-orchestration.test.mjs
+command: node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-orchestration.qa.mjs
 ---
 
 # TC-F001-003 — Provider Replaceability
