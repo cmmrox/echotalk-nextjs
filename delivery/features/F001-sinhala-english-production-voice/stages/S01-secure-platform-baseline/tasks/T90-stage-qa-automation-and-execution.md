@@ -7,8 +7,8 @@ type: stage-qa
 status: draft
 owner_role: qa-engineer
 reviewer_role: project-manager
-owner: pending-independent-qa
-reviewer: pending-project-manager
+owner: /root/s01_independent_qa
+reviewer: /root
 base_sha: d8ee76529d2369592054ade3a1be04fea2a2addc
 result_sha: pending
 depends_on: [T01, T02, T03, T04, T80]

@@ -8,7 +8,7 @@ status: in-review
 owner_role: solution-architect
 reviewer_role: full-stack-developer
 owner: /root
-reviewer: pending-solution-architecture-review
+reviewer: /root/s01_architecture_review
 base_sha: ef369889ccf3144b51c94741e7aa4777edc89d18
 result_sha: 9b2eb15263a06c10e41aa66fc293073437f80663
 depends_on: []
