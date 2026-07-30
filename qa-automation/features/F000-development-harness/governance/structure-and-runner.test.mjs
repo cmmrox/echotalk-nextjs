@@ -95,13 +95,13 @@ test("proposed stage may omit its matrix but ready stage may not", async () => {
     await rm(matrixPath);
     await writeFile(
       stagePath,
-      (await readFile(stagePath, "utf8")).replace("status: in-progress", "status: proposed")
+      (await readFile(stagePath, "utf8")).replace(/^status: .+$/m, "status: proposed")
     );
     const proposed = runAt("validate-qa.mjs", fixture);
     assert.equal(proposed.status, 0, proposed.stderr || proposed.stdout);
     await writeFile(
       stagePath,
-      (await readFile(stagePath, "utf8")).replace("status: proposed", "status: ready")
+      (await readFile(stagePath, "utf8")).replace(/^status: .+$/m, "status: ready")
     );
     const ready = runAt("validate-qa.mjs", fixture);
     assert.notEqual(ready.status, 0);
@@ -215,21 +215,21 @@ test("fabricated authorities and QA hashes fail with a real candidate commit", a
     await writeFile(
       stagePath,
       (await readFile(stagePath, "utf8"))
-        .replace("status: in-progress", "status: released")
-        .replace("candidate_sha: pending", `candidate_sha: ${candidate}`)
-        .replace("human_client: user-client", "human_client: Nobody")
-        .replace("release_owner: pending-human", "release_owner: Fake-Ops")
+        .replace(/^status: .+$/m, "status: released")
+        .replace(/^candidate_sha: .+$/m, `candidate_sha: ${candidate}`)
+        .replace(/^human_client: .+$/m, "human_client: Nobody")
+        .replace(/^release_owner: .+$/m, "release_owner: Fake-Ops")
     );
     const taskRoot = join(stagePath, "../tasks");
     for (const taskName of await readdir(taskRoot)) {
       const taskPath = join(taskRoot, taskName);
       let task = await readFile(taskPath, "utf8");
       task = task
-        .replace(/status: (?:in-review|draft)/, "status: done")
+        .replace(/^status: .+$/m, "status: done")
         .replace(/^base_sha: .+$/m, `base_sha: ${candidate}`)
-        .replace("result_sha: pending", `result_sha: ${candidate}`);
+        .replace(/^result_sha: .+$/m, `result_sha: ${candidate}`);
       if (taskName.startsWith("T90-")) {
-        task = task.replace("owner: pending-independent-qa", "owner: /root/fake_qa");
+        task = task.replace(/^owner: .+$/m, "owner: /root/fake_qa");
       }
       await writeFile(taskPath, task);
     }
@@ -244,15 +244,15 @@ test("fabricated authorities and QA hashes fail with a real candidate commit", a
     await writeFile(
       qaPath,
       (await readFile(qaPath, "utf8"))
-        .replace("Status: pending", "Status: passed")
-        .replace("Candidate commit/artifact: pending", `Candidate commit/artifact: ${candidate}`)
-        .replace("QA harness/final source commit: pending", `QA harness/final source commit: ${harness}`)
-        .replace("Certifying run result: pending", "Certifying run result: passed")
-        .replace("Certifying run record: pending", `Certifying run record: ${runRel}`)
-        .replace("Certifying run record SHA-256: pending", `Certifying run record SHA-256: ${"a".repeat(64)}`)
-        .replace("Certifying run manifest SHA-256: pending", `Certifying run manifest SHA-256: ${manifestHash}`)
-        .replace("QA owner: pending independent QA", "QA owner: /root/fake_qa")
-        .replace("QA completed at: pending", "QA completed at: 2026-07-30T12:00:00Z")
+        .replace(/^- Status: .+$/m, "- Status: passed")
+        .replace(/^- Candidate commit\/artifact: .+$/m, `- Candidate commit/artifact: ${candidate}`)
+        .replace(/^- QA harness\/final source commit: .+$/m, `- QA harness/final source commit: ${harness}`)
+        .replace(/^- Certifying run result: .+$/m, "- Certifying run result: passed")
+        .replace(/^- Certifying run record: .+$/m, `- Certifying run record: ${runRel}`)
+        .replace(/^- Certifying run record SHA-256: .+$/m, `- Certifying run record SHA-256: ${"a".repeat(64)}`)
+        .replace(/^- Certifying run manifest SHA-256: .+$/m, `- Certifying run manifest SHA-256: ${manifestHash}`)
+        .replace(/^- QA owner: .+$/m, "- QA owner: /root/fake_qa")
+        .replace(/^- QA completed at: .+$/m, "- QA completed at: 2026-07-30T12:00:00Z")
     );
     await writeFile(
       join(fixture, runRel),
@@ -261,6 +261,7 @@ test("fabricated authorities and QA hashes fail with a real candidate commit", a
         feature: "F000",
         stage: "S00",
         candidate_sha: candidate,
+        harness_sha: harness,
         manifest: "qa-automation/features/F000-development-harness/stages/S00.json",
         manifest_sha256: manifestHash,
         working_tree_clean: true,

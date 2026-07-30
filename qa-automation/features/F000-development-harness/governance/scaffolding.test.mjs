@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -17,11 +17,40 @@ function run(script, args, root) {
   });
 }
 
+async function normalizeF000ToPlanningState(root) {
+  const stagePath = join(
+    root,
+    "delivery/features/F000-development-harness/stages/S00-production-delivery-harness/stage.md"
+  );
+  await writeFile(
+    stagePath,
+    (await readFile(stagePath, "utf8"))
+      .replace(/^status: .+$/m, "status: in-progress")
+      .replace(/^candidate_sha: .+$/m, "candidate_sha: pending")
+  );
+  const taskRoot = join(stagePath, "../tasks");
+  for (const taskName of await readdir(taskRoot)) {
+    const taskPath = join(taskRoot, taskName);
+    let task = await readFile(taskPath, "utf8");
+    task = task.replace(/^result_sha: .+$/m, "result_sha: pending");
+    if (taskName.startsWith("T90-")) {
+      task = task
+        .replace(/^status: .+$/m, "status: draft")
+        .replace(/^owner: .+$/m, "owner: pending-independent-qa")
+        .replace(/^base_sha: .+$/m, "base_sha: pending");
+    } else {
+      task = task.replace(/^status: .+$/m, "status: in-review");
+    }
+    await writeFile(taskPath, task);
+  }
+}
+
 test("scaffolds a valid feature, stage, and task without overwriting", async () => {
   const fixture = await mkdtemp(join(tmpdir(), "echotalk-scaffold-"));
   try {
     await cp(join(repoRoot, "docs"), join(fixture, "docs"), { recursive: true });
     await cp(join(repoRoot, "delivery"), join(fixture, "delivery"), { recursive: true });
+    await normalizeF000ToPlanningState(fixture);
     await cp(join(repoRoot, ".agents", "roles"), join(fixture, ".agents", "roles"), {
       recursive: true
     });
