@@ -9,8 +9,8 @@ owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
 reviewer: /root/s01_architecture_review
-base_sha: 5b0b9ddba2374b0eaa3a828094ddada12f46a1cd
-result_sha: e1637658a366ca01af5874209ecacc8e81a6f47e
+base_sha: bec55e5dc75b475a7ea62fcfb9d529a7b74d8f58
+result_sha: 8de0d3691238ae6c954e642c053e519fab6fb182
 depends_on: [T02]
 requirement_refs: [F001-R16, F001-R18]
 acceptance_refs: [F001-AC18]
@@ -75,8 +75,9 @@ Offline command only; remove command/config to roll back.
   - `npm run lint` — pass with zero errors and three pre-existing warnings in
     `app/page.tsx` and `media-service/audioPackaging.ts`.
   - `git diff --check` — pass.
-- Evidence: implementation commit
-  `e1637658a366ca01af5874209ecacc8e81a6f47e`.
+- Evidence: initial implementation
+  `e1637658a366ca01af5874209ecacc8e81a6f47e`; review hardening and current
+  result `8de0d3691238ae6c954e642c053e519fab6fb182`.
 - Remaining risks: real corpus and prices require human/provider verification.
 - Handoff decision and receiver: solution architect for implementation review;
   T80 remains blocked on T04 even if this task passes review.
