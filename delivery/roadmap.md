@@ -7,7 +7,7 @@ current delivery state.
 | Feature | Stage | Outcome | Status | Production exposure |
 |---|---|---|---|---|
 | F000 | S00 | Production delivery harness | qa-passed | none |
-| F001 | S01 | Secure platform baseline | proposed | none |
+| F001 | S01 | Secure platform baseline | in-progress | none |
 | F001 | S02 | Evaluation and shadow framework | proposed | none |
 | F001 | S03 | Sinhala-first transcription | proposed | none |
 | F001 | S04 | Bilingual conversation intelligence | proposed | none |

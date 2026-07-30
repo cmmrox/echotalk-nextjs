@@ -8,7 +8,7 @@ feature_doc: docs/features/F001-sinhala-english-production-voice/feature.md
 
 | Stage | Outcome | Status | Candidate |
 |---|---|---|---|
-| [S01](stages/S01-secure-platform-baseline/stage.md) | Secure platform baseline | proposed | pending |
+| [S01](stages/S01-secure-platform-baseline/stage.md) | Secure platform baseline | in-progress | pending |
 | [S02](stages/S02-evaluation-shadow-framework/stage.md) | Evaluation and shadow framework | proposed | pending |
 | [S03](stages/S03-sinhala-first-transcription/stage.md) | Sinhala-first transcription | proposed | pending |
 | [S04](stages/S04-bilingual-conversation-intelligence/stage.md) | Bilingual conversation intelligence | proposed | pending |

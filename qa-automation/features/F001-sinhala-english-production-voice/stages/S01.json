@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "feature": "F001",
+  "stage": "S01",
+  "checks": [
+    {
+      "case": "TC-F001-001",
+      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/recognition-assembly.test.mjs"
+    },
+    {
+      "case": "TC-F001-002",
+      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs"
+    },
+    {
+      "case": "TC-F001-003",
+      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs"
+    },
+    {
+      "case": "TC-F001-004",
+      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs"
+    }
+  ]
+}

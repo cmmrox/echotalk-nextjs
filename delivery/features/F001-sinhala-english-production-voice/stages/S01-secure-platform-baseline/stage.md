@@ -2,8 +2,8 @@
 id: S01
 feature: F001
 slug: secure-platform-baseline
-status: proposed
-acceptance_refs: []
+status: in-progress
+acceptance_refs: [F001-AC02, F001-AC03, F001-AC04, F001-AC09, F001-AC16, F001-AC20, F001-AC21]
 depends_on: []
 final_qa_task: T90
 candidate_sha: pending
@@ -49,11 +49,11 @@ audio binding, idempotency, authorization, and rollback.
 
 | Task | Role | Depends on | Writable paths | Status |
 |---|---|---|---|---|
-| T01 contracts/ADRs | solution-architect | — | assigned architecture files | planned |
-| T02 turn correctness | full-stack-developer | T01 | assigned STT/media/state files | planned |
-| T03 auth/secrets/limits | full-stack-developer | T01 | assigned auth/middleware/API files | planned |
-| T04 provider interfaces/tests | full-stack-developer | T01 | new contracts and tests | planned |
-| T80 serialized integration | full-stack-developer | T02–T04 | shared pipeline/routes/config | planned |
+| T01 contracts/ADRs | solution-architect | — | assigned architecture files | in-review |
+| T02 turn correctness | full-stack-developer | T01 | assigned STT/media/state files | in-review |
+| T03 auth/secrets/limits | full-stack-developer | T01 | assigned auth/middleware/API files | in-review |
+| T04 provider interfaces/tests | full-stack-developer | T01 | new contracts and tests | in-review |
+| T80 serialized integration | full-stack-developer | T02–T04 | shared pipeline/routes/config | in-progress |
 | T90 independent QA | qa-engineer | T80 | QA and gate paths only | draft |
 
 Tasks need exact owners/reviewers, base commit, paths, commands, and artifacts
