@@ -9,15 +9,15 @@
     },
     {
       "case": "TC-F001-002",
-      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs"
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-audio-isolation.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/agent-input.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/turn-concurrency.qa.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/delete-race.qa.mjs"
     },
     {
       "case": "TC-F001-003",
-      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs"
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-contract.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/provider-orchestration.qa.mjs"
     },
     {
       "case": "TC-F001-004",
-      "command": "node --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs"
+      "command": "node --import ./qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/alias-register.mjs --test qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-authorization.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-boundaries.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/feature-flag.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/session-work.test.mjs qa-automation/features/F001-sinhala-english-production-voice/secure-baseline/security-dynamic.qa.mjs"
     }
   ]
 }
