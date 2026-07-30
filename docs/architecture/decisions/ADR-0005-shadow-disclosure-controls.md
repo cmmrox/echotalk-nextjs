@@ -1,6 +1,6 @@
 ---
 id: ADR-0005
-status: proposed
+status: accepted
 date: 2026-07-30
 owners: [/root]
 feature_refs: [F001]

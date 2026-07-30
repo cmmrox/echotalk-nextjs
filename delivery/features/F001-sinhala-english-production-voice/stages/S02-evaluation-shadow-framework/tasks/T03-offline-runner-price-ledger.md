@@ -30,7 +30,8 @@ metrics, attributes catalog-based cost, and emits content-free aggregate JSON.
 ## Included scope and exclusions
 
 - Included: manifest validation, WER/CER, semantic/entity accuracy inputs,
-  latency/success aggregation, price catalog, safe scorecard.
+  clarification eligibility/requested/missing denominators, latency/success
+  aggregation, price catalog, safe scorecard.
 - Excluded: native-speaker baseline, live provider calls, real samples,
   invoices, approved thresholds, or route promotion.
 
@@ -41,7 +42,8 @@ run outputs ignored and accept provider outputs only through test adapters.
 
 ## Tests
 
-- Tests added or updated: metric, manifest, pricing, redaction, determinism.
+- Tests added or updated: metric, clarification denominators/missing
+  eligibility, manifest, pricing, redaction, and determinism.
 - Commands and expected outcomes: all listed commands pass.
 
 ## Acceptance criteria
