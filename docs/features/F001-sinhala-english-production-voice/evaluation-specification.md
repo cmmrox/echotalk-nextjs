@@ -23,20 +23,31 @@ coverage or native-speaker quality.
 
 ## Metrics
 
+- Comparison normalization `comparison-v1` applies Unicode NFC, converts every
+  Unicode whitespace run to one ASCII space, trims leading/trailing space, and
+  folds ASCII `A-Z` to `a-z`. It preserves punctuation, Sinhala code points,
+  numbers, symbols, and all non-ASCII letter case. WER tokens are the resulting
+  space-delimited strings. CER units are Unicode code points, including the
+  normalized inter-word spaces. Any future rule is a new evaluator version.
 - WER: word substitutions + deletions + insertions divided by reference words.
 - CER: Unicode-code-point substitutions + deletions + insertions divided by
-  reference code points after the pinned comparison normalization.
+  normalized reference code points.
 - Semantic accuracy: externally supplied binary/graded judgment with rubric
   version; the runner does not use an LLM to invent ground truth.
 - Entity accuracy: exact protected-entity matches divided by expected entities.
+- Clarification rate: `clarification_requested` observations divided by
+  observations marked clarification-eligible under the pinned critical-entity
+  rubric. Missing eligibility is reported, not treated as false.
 - Success: completed eligible observations divided by attempted observations.
 - Latency: deterministic p50/p95/p99 using nearest-rank over milliseconds.
 - Cost: integer micro-USD estimates by attempted and successful observation,
   using an immutable catalog; estimates are not invoices.
 
 Empty references and missing judgments are reported explicitly, never divided
-silently or counted as passing. Metrics are reported overall and by approved
-slice with denominators and suppressed small cells.
+silently or counted as passing. A non-empty hypothesis against an empty
+reference records every hypothesis unit as an insertion and an undefined rate;
+two empty values record zero edits and an undefined rate. Metrics are reported
+overall and by approved slice with denominators and suppressed small cells.
 
 ## Provenance
 

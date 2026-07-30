@@ -4,7 +4,7 @@ feature: F001
 stage: S02
 slug: shadow-telemetry-controls
 type: implementation
-status: ready
+status: draft
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root

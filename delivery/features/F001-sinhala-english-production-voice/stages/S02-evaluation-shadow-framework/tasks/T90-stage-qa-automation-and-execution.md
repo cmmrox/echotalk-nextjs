@@ -25,7 +25,9 @@ next_owner: project-manager
 ## Outcome
 
 Independently certify or reject the exact S02 candidate and approved external
-corpus/baseline provenance without accessing or persisting restricted content.
+corpus/baseline provenance. QA reproduces mechanics with synthetic fixtures and,
+for a real baseline, runs inside the sealed enclave with ephemeral read-only
+access while exporting only a signed content-free aggregate receipt.
 
 ## Included scope and exclusions
 

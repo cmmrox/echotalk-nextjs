@@ -4,7 +4,7 @@ feature: F001
 stage: S02
 slug: offline-runner-price-ledger
 type: implementation
-status: ready
+status: draft
 owner_role: full-stack-developer
 reviewer_role: solution-architect
 owner: /root
@@ -14,8 +14,8 @@ result_sha: pending
 depends_on: [T02]
 requirement_refs: [F001-R16, F001-R18]
 acceptance_refs: [F001-AC18]
-writable_paths: ["lib/evaluation/**", "scripts/evaluation/**", "evaluation/fixtures/synthetic/**", "evaluation/manifests/**", "config/evaluation/**", "package.json", "qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/tasks/T03-offline-runner-price-ledger.md"]
-prohibited_paths: ["app/**", "components/**", "media-service/**", "evaluation/data/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/gates/**"]
+writable_paths: ["lib/evaluation/contracts.ts", "lib/evaluation/manifest.ts", "lib/evaluation/metrics.ts", "lib/evaluation/pricing.ts", "lib/evaluation/scorecard.ts", "scripts/evaluation/**", "evaluation/fixtures/synthetic/**", "evaluation/manifests/template.json", "config/evaluation/price-catalog.example.v1.json", "package.json", "qa-automation/features/F001-sinhala-english-production-voice/evaluation-framework/offline-runner.test.mjs", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/tasks/T03-offline-runner-price-ledger.md"]
+prohibited_paths: ["app/**", "components/**", "media-service/**", "lib/evaluation/shadowPolicy.ts", "lib/evaluation/shadowTelemetry.ts", "evaluation/data/**", "evaluation/manifests/approved/**", "delivery/features/F001-sinhala-english-production-voice/stages/S02-evaluation-shadow-framework/gates/**"]
 test_commands: ["npm run test:f001:s02:dev", "npm run typecheck", "npm run lint"]
 next_owner: full-stack-developer
 ---

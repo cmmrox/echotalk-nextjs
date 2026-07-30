@@ -36,8 +36,9 @@ access, aggregate evidence, price provenance, and shadow disclosure controls.
 
 ## Development
 
-Record ADR-0003 and an interface document. Product code may implement only
-synthetic/offline and fail-closed control paths before the human gate.
+Record ADR-0003 through ADR-0005 and an interface document. Product code may
+implement only synthetic/offline and fail-closed control paths before the human
+gate.
 
 ## Tests
 

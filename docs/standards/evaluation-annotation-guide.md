@@ -12,7 +12,9 @@ translate or repair meaning.
 
 ## Annotation
 
-- Use the pinned punctuation and whitespace policy.
+- Use `comparison-v1` from the F001 evaluation specification: NFC, collapsed
+  Unicode whitespace, trimmed edges, ASCII-only case folding, and preserved
+  punctuation/Sinhala/numbers/symbols.
 - Tag language/slice and protected entities from the approved taxonomy.
 - Test-set samples require two independent native-speaker annotations.
 - Disagreement requires a separately assigned adjudicator and reason code.
