@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "feature": "FNNN",
+  "stage": "SNN",
+  "candidate_sha": "40_HEX_COMMIT",
+  "release_owner": "PINNED_PRINCIPAL_ID",
+  "deployer": "DEPLOYER_PRINCIPAL_ID",
+  "deployed_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "immutable_artifact": "sha256:64_HEX_DIGEST",
+  "deployment_verification": "passed",
+  "monitoring_result": "passed",
+  "rollback_ref": "DURABLE_ROLLBACK_REFERENCE"
+}

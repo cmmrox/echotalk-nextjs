@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "feature": "F000",
+  "stage": "S00",
+  "checks": [
+    {
+      "case": "TC-F000-001",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/agent-workspace.test.mjs"
+    },
+    {
+      "case": "TC-F000-002",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/delivery-traceability.test.mjs"
+    },
+    {
+      "case": "TC-F000-003",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/scaffolding.test.mjs"
+    },
+    {
+      "case": "TC-F000-004",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/structure-and-runner.test.mjs"
+    },
+    {
+      "case": "TC-F000-005",
+      "command": "node --test qa-automation/features/F000-development-harness/governance/crypto-evidence.test.mjs"
+    }
+  ]
+}

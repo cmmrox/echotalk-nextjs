@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "change_control": {
+    "required_review": "human-client",
+    "protected_branch_required_for_release": true,
+    "external_qa_attestation_required_for_release": true
+  },
+  "authorities": {
+    "product_owner": {
+      "principal_id": "user-client",
+      "status": "assigned"
+    },
+    "human_client": {
+      "principal_id": "user-client",
+      "status": "assigned",
+      "verification": {
+        "method": "pending",
+        "public_key_path": "pending",
+        "public_key_sha256": "pending"
+      }
+    },
+    "security_privacy_owner": {
+      "principal_id": "pending-human",
+      "status": "pending"
+    },
+    "budget_owner": {
+      "principal_id": "pending-human",
+      "status": "pending"
+    },
+    "release_owner": {
+      "principal_id": "pending-human",
+      "status": "pending",
+      "verification": {
+        "method": "pending",
+        "public_key_path": "pending",
+        "public_key_sha256": "pending"
+      }
+    }
+  }
+}

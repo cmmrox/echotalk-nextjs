@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored/generated VAD runtime assets are not authored source.
+    "public/vad/**",
   ]),
 ]);
 

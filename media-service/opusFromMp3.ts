@@ -9,10 +9,11 @@
  */
 
 import { spawn } from "child_process";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 
 const FFMPEG =
   process.env.FFMPEG_PATH ||
-  "/usr/local/bin/ffmpeg";
+  ffmpegInstaller.path;
 
 // ---------------------------------------------------------------------------
 // OGG page parser — extracts raw Opus frame payloads from an OGG Opus buffer.
@@ -39,7 +40,7 @@ function parseOggOpusFrames(ogg: Buffer): Buffer[] {
     if (offset + 27 + numSegments > ogg.length) break;
 
     const segTable = ogg.slice(offset + 27, offset + 27 + numSegments);
-    let dataOffset = offset + 27 + numSegments;
+    const dataOffset = offset + 27 + numSegments;
     let dataSize = 0;
     for (let i = 0; i < numSegments; i++) dataSize += segTable[i];
 

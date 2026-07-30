@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "skill": "echotalk-development",
+  "role_contract": "docs/governance/team-role-contracts.md",
+  "human_authorities": [
+    "human-client",
+    "product-owner",
+    "security-privacy-owner",
+    "budget-owner",
+    "release-owner"
+  ],
+  "roles": [
+    {
+      "slug": "project-manager",
+      "title": "Project Manager",
+      "description": "Coordinates bounded delivery, dependencies, evidence, and gates.",
+      "contract_heading": "Role: Project Manager",
+      "routes": [
+        "docs/governance/feature-stage-task-lifecycle.md",
+        "docs/standards/git-release-and-operations.md"
+      ],
+      "codex_sandbox": "read-only",
+      "claude_tools": "Read, Grep, Glob, Bash",
+      "worktree": false
+    },
+    {
+      "slug": "business-analyst",
+      "title": "Business Analyst",
+      "description": "Defines traceable requirements, scenarios, and acceptance criteria.",
+      "contract_heading": "Role: Business Analyst",
+      "routes": [
+        "docs/product/product-and-domain.md",
+        "docs/governance/artifact-contracts.md"
+      ],
+      "codex_sandbox": "read-only",
+      "claude_tools": "Read, Grep, Glob",
+      "worktree": false
+    },
+    {
+      "slug": "solution-architect",
+      "title": "Solution Architect",
+      "description": "Designs boundaries, quality attributes, security, and migration.",
+      "contract_heading": "Role: Solution Architect",
+      "routes": [
+        "docs/architecture/current-system.md",
+        "docs/architecture/target-system.md",
+        "docs/standards/security-and-privacy.md"
+      ],
+      "codex_sandbox": "read-only",
+      "claude_tools": "Read, Grep, Glob, Bash",
+      "worktree": false
+    },
+    {
+      "slug": "full-stack-developer",
+      "title": "Full-stack Developer",
+      "description": "Implements a bounded slice with tests, telemetry, and rollback.",
+      "contract_heading": "Role: Full-stack Developer",
+      "routes": [
+        "docs/standards/engineering.md",
+        "docs/standards/testing.md"
+      ],
+      "codex_sandbox": "workspace-write",
+      "claude_tools": "Read, Grep, Glob, Bash, Edit, Write",
+      "worktree": true
+    },
+    {
+      "slug": "ui-ux-engineer",
+      "title": "UI/UX Engineer",
+      "description": "Designs and implements accessible product interaction journeys.",
+      "contract_heading": "Role: UI/UX Engineer",
+      "routes": [
+        "docs/product/product-and-domain.md",
+        "docs/standards/bilingual-ai-quality.md",
+        "docs/standards/testing.md"
+      ],
+      "codex_sandbox": "workspace-write",
+      "claude_tools": "Read, Grep, Glob, Bash, Edit, Write",
+      "worktree": true
+    },
+    {
+      "slug": "qa-engineer",
+      "title": "QA Engineer",
+      "description": "Independently verifies quality, regression, and release evidence.",
+      "contract_heading": "Role: QA Engineer",
+      "routes": [
+        "docs/standards/testing.md",
+        "docs/governance/qa-uat-and-release-gates.md"
+      ],
+      "codex_sandbox": "workspace-write",
+      "claude_tools": "Read, Grep, Glob, Bash, Edit, Write",
+      "worktree": true
+    },
+    {
+      "slug": "uat-coordinator",
+      "title": "UAT Coordinator",
+      "description": "Prepares UAT and records explicit human client decisions.",
+      "contract_heading": "Role: UAT Coordinator",
+      "routes": [
+        "docs/product/stakeholders-and-authority.md",
+        "docs/governance/qa-uat-and-release-gates.md"
+      ],
+      "codex_sandbox": "read-only",
+      "claude_tools": "Read, Grep, Glob",
+      "worktree": false
+    }
+  ]
+}

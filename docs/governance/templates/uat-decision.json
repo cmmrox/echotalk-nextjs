@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "feature": "FNNN",
+  "stage": "SNN",
+  "candidate_sha": "40_HEX_COMMIT",
+  "human_client": "PINNED_PRINCIPAL_ID",
+  "decision": "accepted",
+  "decided_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "production_release_authorized": false,
+  "conditions": [],
+  "evidence_refs": [
+    "DURABLE_EVIDENCE_REFERENCE"
+  ]
+}

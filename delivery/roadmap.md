@@ -1,24 +1,13 @@
-# EchoTalk Production Roadmap
+# EchoTalk Live Delivery Roadmap
 
-The canonical stage definitions and dependencies are maintained in:
+Product direction belongs in
+[`docs/product/roadmap.md`](../docs/product/roadmap.md). This file reports only
+current delivery state.
 
-`../.agents/skills/echotalk-development/references/stage-roadmap.md`
+| Feature | Stage | Outcome | Status | Production exposure |
+|---|---|---|---|---|
+| F000 | S00 | Production delivery harness | in-progress | none |
 
-## Delivery state
-
-| Stage | Outcome | Status | Production exposure |
-|---|---|---|---|
-| S00 | Delivery and environment foundation | in-progress | none |
-| S01 | Secure platform baseline | proposed | gated |
-| S02 | Evaluation and shadow framework | proposed | shadow only |
-| S03 | Sinhala-first transcription | proposed | controlled rollout |
-| S04 | Bilingual conversation intelligence | proposed | controlled rollout |
-| S05 | Natural speech output | proposed | controlled rollout |
-| S06 | Real-time UX and resilience | proposed | controlled rollout |
-| S07 | Controlled general availability | proposed | human-authorized |
-
-## Governance
-
-Each stage receives its own charter, task handoffs, ADRs, QA report, UAT record,
-and release evidence. A later stage may start discovery in parallel, but cannot
-bypass dependency, QA, human UAT, or production authorization gates.
+Future roadmap items receive stable feature and stage IDs only when their
+feature record is created. No roadmap line implies implementation, QA, UAT, or
+release completion.

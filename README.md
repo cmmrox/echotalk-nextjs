@@ -1,83 +1,73 @@
-# EchoTalk (Next.js)
+# EchoTalk
 
-Minimal voice conversational AI web app:
+EchoTalk is a prototype Sinhala-English voice conversation application with
+visible text parity and an in-process WebRTC media pipeline. The current
+implementation uses Google Speech-to-Text, an OpenAI text model, and Google
+Text-to-Speech; these are implementation adapters, not permanent product
+requirements.
 
-Mic → **Google STT** → **OpenAI** → **Google TTS** → playback
+This checkout is not yet production-ready. Current gaps and the controlled
+roadmap are documented in:
 
-## Prereqs
-- Node.js + npm
-- Google Cloud service account JSON with access to:
-  - Speech-to-Text
-  - Text-to-Speech
+- [Project knowledge](docs/index.md)
+- [Current system and limitations](docs/architecture/current-system.md)
+- [Production roadmap](docs/product/roadmap.md)
+- [Live delivery state](delivery/roadmap.md)
+- [QA automation](qa-automation/README.md)
 
-## Setup
+## Local setup
 
-1) Install deps
+Prerequisites:
+
+- Node.js 20 or newer
+- npm
+- Google Cloud credentials with Speech-to-Text and Text-to-Speech access
+- OpenAI API credentials
+
 ```bash
-npm install
-```
-
-2) Create `.env.local`
-
-This repo expects server-side secrets **only** in `.env.local` (gitignored).
-Use `.env.example` as reference.
-
-Minimum required:
-- `ECHOTALK_GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/google-sa.json`
-- `OPENAI_API_KEY=...`
-
-Optional:
-- `ECHOTALK_LANGUAGES=en-US,si-LK,ta-LK`
-- `OPENAI_MODEL=gpt-4.1-mini`
-- `NEXT_PUBLIC_ECHOTALK_MAX_RECORD_SECONDS=60`
-
-## Run
-```bash
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
-Open http://localhost:3000
 
-## Endpoints
+Open [http://localhost:3000](http://localhost:3000). Put only local secret
+values and machine-specific credential paths in `.env.local`; it is ignored.
 
-### Push-to-talk (legacy / simple)
-- `POST /api/stt` — multipart `audio` → `{ transcript, detectedLanguage, confidence }`
-- `POST /api/agent` — `{ transcript, detectedLanguage? }` → `{ replyText, replyLanguage }`
-- `POST /api/tts` — `{ text, languageCode? }` → `audio/mpeg`
+## Configuration
 
-### Live WebRTC conversation (media-service)
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/api/media-service/session` | Create a new media session → `{ sessionId }` |
-| `GET` | `/api/media-service/session?sessionId=…` | Poll session state + telemetry |
-| `DELETE` | `/api/media-service/session?sessionId=…` | End session and clean up peer |
-| `POST` | `/api/media-service/offer` | SDP offer → returns SDP answer |
-| `POST` | `/api/media-service/ice` | Trickle ICE candidate from browser |
-| `POST` | `/api/media-service/trigger-turn` | VAD speech-end → finalize current segment |
-| `POST` | `/api/media-service/set-listening?listening=0\|1` | Echo gate: pause/resume inbound processing |
-| `GET` | `/api/media-service/outbound/latest?sessionId=…` | Fetch latest TTS audio (HTTP fallback) |
-| `POST` | `/api/media-service/client-event` | Browser diagnostic events (logging only) |
+`.env.example` is the authoritative variable inventory. The minimum current
+provider configuration is:
 
-## Architecture
+- `ECHOTALK_GOOGLE_APPLICATION_CREDENTIALS` or
+  `GOOGLE_APPLICATION_CREDENTIALS`
+- `OPENAI_API_KEY`
 
+Optional settings choose the current language shortlist, provider models,
+Speech-to-Text location, recording limit, and FFmpeg path.
+
+## Current interfaces
+
+- Legacy HTTP flow: `POST /api/stt`, `POST /api/agent`, `POST /api/tts`
+- Live session/signalling: `/api/media-service/*`
+- Browser and UI: `app/`, `components/echo/`, `lib/webrtc/`
+- Media and turn orchestration: `media-service/`
+
+See the [current architecture](docs/architecture/current-system.md) and
+[media-service component](docs/architecture/components/media-service.md) rather
+than relying on this quickstart for system design.
+
+## Development harness
+
+Every change follows an approved Feature → Stage → Task path. A stage is the
+release increment and ends with independent T90 QA. Human client UAT,
+production permission, and release-owner approval remain separate.
+
+```bash
+npm run governance:validate
+npm run test:governance
+npm run lint
+npm run typecheck
+npm run build
 ```
-Browser mic  →  WebRTC (werift)  →  inboundTrack.ts
-                                       ↓ VAD / 300-packet window
-                                  segmentationBuffer.ts
-                                       ↓
-                                  processingQueue.ts
-                                   ↙         ↘
-                           Google STT      (empty → skip)
-                                ↓
-                           OpenAI agent (with conversation history)
-                                ↓
-                           Google TTS  →  outboundAudioTrack.ts
-                                              ↓ RTP via werift
-                                         Browser plays remote track
-                                         (HTTP fallback if DTLS not ready)
-```
 
-## Troubleshooting
-- **Mic permission**: ensure your browser allows microphone access.
-- **Google auth**: verify `ECHOTALK_GOOGLE_APPLICATION_CREDENTIALS` points to a readable service-account JSON file.
-- **OpenAI**: verify `OPENAI_API_KEY` is set in `.env.local`.
-- **WebRTC**: for corporate/strict-NAT networks add TURN server URLs to `iceServers` in `media-service/peerManager.ts`.
+Read [AGENTS.md](AGENTS.md) when working with Codex or Claude Code.

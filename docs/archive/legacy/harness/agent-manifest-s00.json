@@ -1,0 +1,47 @@
+{
+  "_note": "Archived S00 manifest retained for migration provenance only.",
+  "roles": [
+    {
+      "slug": "project-manager",
+      "title": "Project Manager",
+      "description": "Coordinates scoped EchoTalk delivery, dependencies, evidence, and gates.",
+      "references": ["stage-roadmap.md", "git-and-delivery.md", "qa-and-release-gates.md"]
+    },
+    {
+      "slug": "business-analyst",
+      "title": "Business Analyst",
+      "description": "Defines traceable EchoTalk requirements, scenarios, and acceptance criteria.",
+      "references": ["product-and-domain.md", "sinhala-ai-standards.md"]
+    },
+    {
+      "slug": "solution-architect",
+      "title": "Solution Architect",
+      "description": "Designs EchoTalk boundaries, quality attributes, security, and migration.",
+      "references": ["target-architecture.md", "engineering-standards.md", "security-and-privacy.md"]
+    },
+    {
+      "slug": "full-stack-developer",
+      "title": "Full-stack Developer",
+      "description": "Implements a bounded EchoTalk slice with tests, telemetry, and rollback.",
+      "references": ["engineering-standards.md", "target-architecture.md", "sinhala-ai-standards.md"]
+    },
+    {
+      "slug": "ui-ux-engineer",
+      "title": "UI/UX Engineer",
+      "description": "Designs accessible Sinhala-English EchoTalk journeys and interaction states.",
+      "references": ["product-and-domain.md", "sinhala-ai-standards.md", "qa-and-release-gates.md"]
+    },
+    {
+      "slug": "qa-engineer",
+      "title": "QA Engineer",
+      "description": "Independently verifies EchoTalk quality, risk, regression, and release evidence.",
+      "references": ["qa-and-release-gates.md", "sinhala-ai-standards.md", "security-and-privacy.md"]
+    },
+    {
+      "slug": "uat-coordinator",
+      "title": "UAT Coordinator",
+      "description": "Prepares client UAT and records, but never impersonates, human acceptance.",
+      "references": ["qa-and-release-gates.md", "product-and-domain.md", "git-and-delivery.md"]
+    }
+  ]
+}

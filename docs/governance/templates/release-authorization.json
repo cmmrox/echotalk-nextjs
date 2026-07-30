@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "feature": "FNNN",
+  "stage": "SNN",
+  "candidate_sha": "40_HEX_COMMIT",
+  "release_owner": "PINNED_PRINCIPAL_ID",
+  "operational_decision": "go",
+  "approved_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "immutable_artifact": "sha256:64_HEX_DIGEST",
+  "configuration_schema_version": "VERSION",
+  "environment": "PRODUCTION_ENVIRONMENT",
+  "qa_independence_evidence": "PROTECTED_REVIEW_OR_CI_ATTESTATION",
+  "rollback_ref": "DURABLE_ROLLBACK_REFERENCE"
+}

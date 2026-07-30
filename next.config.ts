@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Resolve the platform-specific FFmpeg binary at server runtime, not while
+  // Turbopack traces route modules.
+  serverExternalPackages: ["@ffmpeg-installer/ffmpeg"],
   async headers() {
     return [
       {

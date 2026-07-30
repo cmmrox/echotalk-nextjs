@@ -1,20 +1,9 @@
 # EchoTalk Media Service
 
-This service will host long-lived WebRTC media session state for the full end-to-end WebRTC phase.
+This directory contains the current in-process WebRTC media and turn
+orchestration implementation. Its canonical responsibility, flow, extraction
+boundary, and limitations are documented in:
 
-## Purpose
+[`docs/architecture/components/media-service.md`](../docs/architecture/components/media-service.md)
 
-- keep active peer connections alive outside short-lived route handlers
-- own live media/session state
-- receive inbound WebRTC tracks directly
-- later handle outbound assistant audio over WebRTC
-
-## Current status
-
-Scaffold only. Signaling integration and direct media handling are not complete yet.
-
-## Planned role in local dev
-
-- run alongside Next.js dev server
-- expose a local control surface for session/offer/ICE/stop operations
-- keep session/peer state in one stable process
+Do not treat this directory README as a second architecture source.
